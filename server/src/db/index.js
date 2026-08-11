@@ -235,7 +235,12 @@ export function seedDatabase() {
   } else {
     console.log('[数据库] SEED_DEMO_DATA=false，跳过示例分类与书签（纯净启动）');
   }
-  seedEngines();
+
+  // 搜索引擎幂等写入：migrateDatabase 已对空库补种，此处避免重复插入触发 UNIQUE 冲突
+  const hasEngines = db.prepare('SELECT COUNT(*) as count FROM search_engines').get();
+  if (hasEngines.count === 0) {
+    seedEngines();
+  }
 
   console.log('[数据库] 种子数据写入完成');
 }
