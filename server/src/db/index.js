@@ -94,13 +94,21 @@ export function initDatabase() {
 /**
  * 写入管理员 + 偏好种子数据
  * 仅首次建库（admin 表为空）时执行；生产环境强制校验密码强度
+ * 独立演示实例可设置 ALLOW_DEMO_PASSWORD=true 放行默认密码 admin123，仅演示用途
  */
 function seedAdminAndPrefs() {
   // 生产环境强校验：禁止使用默认密码 admin123（仅首次建库生效，后续改密后不受影响）
+  // 独立演示实例通过 ALLOW_DEMO_PASSWORD=true 放行，严禁用于正式环境
   const adminPassword = process.env.ADMIN_PASSWORD;
-  if (process.env.NODE_ENV === 'production' && (!adminPassword || adminPassword === 'admin123')) {
+  const allowDemoPassword = process.env.ALLOW_DEMO_PASSWORD === 'true';
+  if (
+    process.env.NODE_ENV === 'production' &&
+    !allowDemoPassword &&
+    (!adminPassword || adminPassword === 'admin123')
+  ) {
     console.error('[启动][严重] 生产环境禁止使用默认管理员密码 admin123！');
     console.error('  请在 .env 中设置 ADMIN_PASSWORD（至少 8 位，建议字母+数字组合）');
+    console.error('  仅独立演示实例可设置 ALLOW_DEMO_PASSWORD=true 放行，严禁用于正式环境');
     throw new Error('生产环境必须配置强 ADMIN_PASSWORD，禁止使用默认密码 admin123');
   }
 
