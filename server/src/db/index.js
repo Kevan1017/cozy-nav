@@ -211,14 +211,22 @@ function seedLinks(categoryIds) {
 
 /**
  * 写入种子数据（仅首次启动时）
+ * 设置 SEED_DEMO_DATA=false 可实现"纯净启动"：只建 admin 账号和默认搜索引擎，
+ * 不写入示例分类与书签；搜索引擎是搜索功能必需的基础数据，始终保留
  */
 export function seedDatabase() {
   const hasAdmin = db.prepare('SELECT COUNT(*) as count FROM admin').get();
   if (hasAdmin.count > 0) return;
 
   seedAdminAndPrefs();
-  const categoryIds = seedCategories();
-  seedLinks(categoryIds);
+
+  const demoEnabled = process.env.SEED_DEMO_DATA !== 'false';
+  if (demoEnabled) {
+    const categoryIds = seedCategories();
+    seedLinks(categoryIds);
+  } else {
+    console.log('[数据库] SEED_DEMO_DATA=false，跳过示例分类与书签（纯净启动）');
+  }
   seedEngines();
 
   console.log('[数据库] 种子数据写入完成');
