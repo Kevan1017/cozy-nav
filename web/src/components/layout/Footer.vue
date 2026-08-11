@@ -4,8 +4,9 @@
  * 版权文案固定模板：Copyright ©{当前年份} {网站标题}. All Rights Reserved.
  * 网站标题可在后台「基本配置」中修改，标题带链接跳转首页
  */
-import { computed } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { usePrefsStore } from '../../stores/prefs.js';
+import { versionApi } from '../../api/version.js';
 
 const prefsStore = usePrefsStore();
 
@@ -14,6 +15,17 @@ const currentYear = new Date().getFullYear();
 
 /** 版权链接文本：固定使用网站标题 */
 const copyrightText = computed(() => prefsStore.siteTitle || '悦行');
+
+/** 版本号（如 v1.0.0+abc1234），读取失败则隐藏不显示 */
+const appVersion = ref('');
+onMounted(async () => {
+  try {
+    const res = await versionApi.get();
+    appVersion.value = res.data?.display || '';
+  } catch {
+    appVersion.value = '';
+  }
+});
 </script>
 
 <template>
@@ -24,6 +36,7 @@ const copyrightText = computed(() => prefsStore.siteTitle || '悦行');
         <a href="/" class="copy-link">{{ copyrightText }}</a>
         . All Rights Reserved.
       </span>
+      <span v-if="appVersion" class="ver">{{ appVersion }}</span>
     </div>
     <span class="sig"> 一个 <span class="h">软乎乎</span> 的小角落 ♡</span>
   </div>
@@ -71,6 +84,14 @@ const copyrightText = computed(() => prefsStore.siteTitle || '悦行');
   align-items: center;
   flex-wrap: wrap;
   white-space: nowrap;
+}
+
+/* 版本号：弱化小字，不打扰主内容 */
+.foot .ver {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .02em;
+  opacity: .55;
 }
 
 /* 版权链接：继承默认文字色，悬停显示主题色 */

@@ -14,6 +14,7 @@ import backupRoutes from './routes/backup.js';
 import { cleanExpiredFailedRecords, FAVICON_DIR } from './utils/faviconFetcher.js';
 import { startHealthPatrol, startDailyBackup } from './utils/scheduler.js';
 import { LOGO_DIR } from './controllers/prefsController.js';
+import { getVersionInfo } from './utils/version.js';
 
 // 校验环境变量
 const PORT = process.env.PORT;
@@ -165,6 +166,11 @@ app.get('/robots.txt', (req, res) => {
 // 路由
 app.get('/api/health', (req, res) => {
   res.json({ code: 200, message: 'success', data: { status: 'ok' } });
+});
+
+// 版本信息（公开）：配合 Git 版本管理，前台页脚 / 后台设置展示当前部署版本
+app.get('/api/version', (req, res) => {
+  res.json({ code: 200, message: 'success', data: getVersionInfo() });
 });
 
 app.use('/api/auth', authRoutes);
