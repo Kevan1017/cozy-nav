@@ -1,0 +1,276 @@
+/* cozy·nav 后台管理共享样式（App.vue 全局加载）
+ * 由 Settings / LinkManage / CategoryManage 拆分后抽取，消除重复声明：
+ * - 数据表格分页区域
+ * - 管理页表格卡片（table-card）
+ * - 回收站批量操作栏 / 移动端分页栏
+ * - 书签名称列（link-cell）、分类 Emoji 色块（cat-emoji）
+ * - 移动端卡片列表（mob-*）
+ */
+
+/* ---------- 数据表格全局分页区域 ---------- */
+.n-data-table__pagination {
+  padding: 16px 24px 20px !important;
+}
+
+/* ---------- 独立分页（横向滚动表格的分页移出滚动容器，滚动条在分页上方） ---------- */
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 16px 24px 20px !important;
+}
+
+/* ---------- 管理页表格卡片 ---------- */
+.table-card {
+  border-radius: 18px !important;
+}
+.table-card .n-card {
+  border-radius: 18px !important;
+  border: none !important;
+}
+.table-card .n-data-table {
+  font-size: 14px;
+}
+.table-card .n-data-table-th {
+  font-weight: 600;
+}
+.table-card .n-data-table-pagination {
+  padding: 16px 24px 20px !important;
+}
+/* 左侧闭合修复 */
+.table-card .n-data-table .n-data-table-td:first-child,
+.table-card .n-data-table .n-data-table-th:first-child {
+  border-left: none !important;
+}
+/* 表格单元格强制单行：任一列文本不换行，超长由各列 ellipsis 省略 */
+.table-card .n-data-table-td,
+.table-card .n-data-table-th {
+  white-space: nowrap;
+}
+/* 表格列头排序箭头：与文本紧贴（去掉 title 撑满导致的箭头靠右空隙），未激活也可见、激活态主题色加深 */
+.table-card .n-data-table-th .n-data-table-th__title {
+  flex: none;
+}
+.table-card .n-data-table-th .n-data-table-sorter {
+  margin-left: 4px;
+  color: var(--admin-text);
+}
+.table-card .n-data-table-th .n-data-table-sorter .n-base-icon {
+  color: var(--admin-text) !important;
+}
+.table-card .n-data-table-th.n-data-table-th--sortable:hover .n-data-table-sorter {
+  color: var(--admin-accent);
+}
+.table-card .n-data-table-th .n-data-table-sorter.n-data-table-sorter--asc,
+.table-card .n-data-table-th .n-data-table-sorter.n-data-table-sorter--desc {
+  color: var(--admin-accent) !important;
+}
+/* 表格横向滚动条常显美化：外层滚动容器空间不足时出现横向滚动查看完整列，滚动条细圆角可拖拽 */
+.table-scroll-wrap {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--admin-accent, #e8a87c) 40%, transparent) transparent;
+}
+.table-scroll-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+.table-scroll-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+.table-scroll-wrap::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--admin-accent, #e8a87c) 35%, transparent);
+}
+.table-scroll-wrap::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--admin-accent, #e8a87c) 55%, transparent);
+}
+
+/* ---------- 回收站批量操作栏 / 移动端分页栏 ---------- */
+.trash-batch-bar {
+  display: flex;
+  gap: 8px;
+  padding: 0 24px 20px;
+  justify-content: flex-start;
+}
+.trash-page-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 12px 4px;
+}
+.trash-page-info {
+  font-size: 13px;
+  color: var(--admin-muted);
+  white-space: nowrap;
+}
+
+/* ---------- 书签名称列（favicon + 名称） ---------- */
+.link-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+}
+/* 名称可点击：不显示默认下划线，悬停仅变色提示 */
+.link-cell .link-cell-name {
+  text-decoration: none;
+}
+.link-cell .link-cell-name:hover {
+  color: var(--admin-accent) !important;
+}
+
+/* ---------- 分类管理排序列（数值 + 上移/下移按钮） ---------- */
+.sort-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.sort-cell .sort-val {
+  min-width: 26px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--admin-text-2);
+}
+
+/* ---------- 分类 Emoji 色块（白底 + 描边，不再依赖浅背景素色） ---------- */
+.cat-emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  font-size: 17px;
+  background: #ffffff;
+  box-shadow:
+    0 2px 6px -2px var(--admin-shadow),
+    inset 0 0 0 1px var(--bgc, var(--admin-peach));
+  position: relative;
+}
+/* 左上斜切彩色区，呼应主色 */
+.cat-emoji::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background: linear-gradient(135deg,
+    var(--bgc, var(--admin-peach)) 0%,
+    var(--bgc, var(--admin-peach)) 45%,
+    transparent 45%,
+    transparent 100%);
+  opacity: .25;
+  pointer-events: none;
+}
+.cat-emoji.big {
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
+  border-radius: 12px;
+}
+
+/* ---------- 移动端卡片列表 ---------- */
+.mobile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mob-batch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--card-bg, transparent);
+  border-radius: 12px;
+  margin-bottom: 4px;
+}
+.mob-card { border-radius: 16px !important; }
+.mob-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.mob-titles { flex: 1; min-width: 0; }
+.mob-name {
+  font-weight: 700;
+  color: var(--admin-text);
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+a.mob-name:hover {
+  color: var(--admin-accent);
+}
+.mob-sub {
+  color: var(--admin-muted);
+  font-size: 12px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mob-domain {
+  color: var(--admin-muted);
+  font-size: 12px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mob-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--admin-peach);
+  border-bottom: 1px solid var(--admin-peach);
+  margin-bottom: 10px;
+}
+.mob-sort {
+  font-size: 12px;
+  color: var(--admin-muted);
+}
+.mob-note {
+  margin-top: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--admin-muted);
+  background: color-mix(in oklab, var(--admin-card) 60%, transparent);
+  border-radius: 6px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mob-ops {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.mob-ops .n-checkbox {
+  margin-right: auto;
+}
+.mob-pin {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.mob-pin-label {
+  font-size: 12px;
+  color: var(--admin-muted);
+  white-space: nowrap;
+}
+
+/* 暗色模式：移动端 meta 分割线 */
+body:has(#dm:checked) .mob-meta {
+  border-color: var(--admin-divider);
+}

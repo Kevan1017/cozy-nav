@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>收藏到 悦行</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <!-- 顶部标题 -->
+  <header class="hd">
+    <span class="logo">🧭</span>
+    <span class="hd-title">收藏到 悦行</span>
+  </header>
+
+  <!-- 设置区：服务器地址 -->
+  <section class="sec hidden" id="sec-settings">
+    <div class="row">
+      <input id="serverUrl" type="text" placeholder="服务器地址，如 http://localhost:8000" />
+    </div>
+    <button id="btnSaveServer" class="btn btn-primary">保存并继续</button>
+    <p class="tip">填写悦行后端地址（含端口），生产环境用 https 域名。</p>
+  </section>
+
+  <!-- 登录区 -->
+  <section class="sec hidden" id="sec-login">
+    <div class="row"><input id="username" type="text" placeholder="管理员用户名" /></div>
+    <div class="row"><input id="password" type="password" placeholder="管理员密码" /></div>
+    <button id="btnLogin" class="btn btn-primary">登录</button>
+    <p class="tip" id="loginTip"></p>
+  </section>
+
+  <!-- 收藏区 -->
+  <section class="sec hidden" id="sec-save">
+    <div class="row"><input id="linkUrl" type="text" placeholder="链接地址" /></div>
+    <div class="row"><input id="linkTitle" type="text" placeholder="名称" /></div>
+    <div class="row"><select id="category"></select></div>
+    <div class="row"><input id="note" type="text" placeholder="备注（可选）" /></div>
+    <button id="btnSave" class="btn btn-primary">收藏</button>
+    <div class="dup hidden" id="dupBox">
+      <p class="tip" id="dupMsg"></p>
+      <button id="btnForce" class="btn btn-danger">仍要收藏（允许重复）</button>
+    </div>
+    <p class="tip" id="saveTip"></p>
+  </section>
+
+  <footer class="ft">
+    <span class="muted" id="loggedUser"></span>
+    <span class="ft-actions">
+      <button id="btnSettings" class="link">设置</button>
+      <button id="btnLogout" class="link hidden">退出登录</button>
+    </span>
+  </footer>
+
+  <script src="common.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

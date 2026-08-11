@@ -1,0 +1,105 @@
+/* popup 样式：简洁绿色系，与 cozy·nav 后台风格保持一致 */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  width: 340px;
+  font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 13px;
+  color: #2b2b2b;
+  background: #fdfcf9;
+  padding: 0 14px 12px;
+}
+
+/* 顶部 */
+.hd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 0 10px;
+  border-bottom: 1px solid rgba(120, 100, 90, 0.12);
+  margin-bottom: 12px;
+}
+.hd .logo { font-size: 18px; }
+.hd-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: #2f855a;
+}
+
+/* 区块 */
+.sec { display: flex; flex-direction: column; gap: 8px; }
+.hidden { display: none !important; }
+
+.row input,
+.row select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid rgba(120, 100, 90, 0.22);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  outline: none;
+}
+.row input:focus,
+.row select:focus {
+  border-color: #34b47e;
+  box-shadow: 0 0 0 2px rgba(52, 180, 126, 0.15);
+}
+
+/* 按钮 */
+.btn {
+  width: 100%;
+  padding: 9px 0;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter .15s ease;
+}
+.btn:disabled { opacity: .55; cursor: default; }
+.btn-primary { background: #34b47e; color: #fff; }
+.btn-primary:hover:not(:disabled) { filter: brightness(.95); }
+.btn-danger {
+  background: transparent;
+  color: #c0392b;
+  border: 1px solid rgba(192, 57, 43, .45);
+  padding: 6px 0;
+  margin-top: 4px;
+}
+
+/* 提示文字 */
+.tip {
+  font-size: 12px;
+  color: #8a7d70;
+  line-height: 1.5;
+}
+
+/* 重复提示框 */
+.dup {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(192, 57, 43, .06);
+  border: 1px solid rgba(192, 57, 43, .25);
+}
+
+/* 底部 */
+.ft {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(120, 100, 90, 0.1);
+}
+.muted { font-size: 11px; color: #9a8f83; }
+.ft-actions { display: flex; align-items: center; gap: 10px; }
+.link {
+  background: none;
+  border: none;
+  color: #9a8f83;
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.link:hover { color: #c0392b; }

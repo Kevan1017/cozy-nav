@@ -1,0 +1,193 @@
+/* cozy·nav Design Tokens — 琥珀青松 v7.0
+   暖色奶油底 + 琥珀金主题 + 青松绿副色
+   亮暗双模式，基于 OKLCH 感知均匀色彩空间 */
+
+:root {
+  /* ===== 亮色主题 ===== */
+  /* 背景：暖奶油色 */
+  --bg: #FAF6F0;
+  --cream: #F2EADF;
+
+  /* 分类色系 — 暖色体系 */
+  --peach: #E8A088;
+  --mint: #7BB89A;
+  --lav: #C89FC8;
+  --sky: #8CB8D8;
+  --rose: #E8928C;
+  --butter: #E8C878;
+  --coral: #E89858;
+  --aqua: #5FB8A8;
+  --sage: #8BB878;
+  --lilac: #B88FC8;
+  --sand: #D8B878;
+  --foam: #78A8B8;
+  --cherry: #D86878;
+  --lemon: #D8C858;
+  --teal: #5FA898;
+  --mauve: #C87888;
+  --fog: #A89888;
+  --apricot: #E8A860;
+  --seafoam: #78B898;
+  --blush: #D88898;
+  --mist: #8AA8B8;
+  --citrus: #E8B848;
+  --perwinkle: #8898C8;
+  --tangerine: #E88848;
+  --sage2: #98B868;
+  --berry: #C85878;
+  --dove: #A89888;
+  --amber: #E8923C;
+  --turquoise: #4FA898;
+  --violet: #9868B8;
+  --vermilion: #D85838;
+  --emerald: #4FA878;
+  --saffron: #E89848;
+  --mauve2: #B86888;
+  --olive: #A8A848;
+  --magenta: #B84898;
+  --jade: #4FB888;
+
+  /* 文字色系：暖棕灰 */
+  --ink: #2A2418;
+  --ink2: #5A5244;
+  --soft: #8A8070;
+
+  /* 主题色：琥珀金 + 珊瑚粉 */
+  --pop: #E8923C;
+  --pop2: #E85B7A;
+  --pop3: #9B8FD0;
+  --peach-dark: #C87858;
+
+  --on-pop: #FFFFFF;
+
+  /* 卡片/表面 */
+  --card: rgba(255, 253, 248, .78);
+  --card-solid: #FFFDF8;
+  --link-bg: #F5EDE0;
+  --shadow: rgba(42, 36, 24, .14);
+
+  /* 分割线 / 边框 */
+  --rule: rgba(42, 36, 24, .10);
+  --glow: rgba(232, 146, 60, .18);
+  --admin-divider: rgba(42, 36, 24, .10);
+
+  /* 背景渐变球颜色（4 个方位） */
+  --blob-1: rgba(232, 180, 120, .35);
+  --blob-2: rgba(123, 184, 154, .30);
+  --blob-3: rgba(200, 159, 200, .28);
+  --blob-4: rgba(140, 184, 216, .28);
+
+  /* 半透粉彩（暗色下用） */
+  --peach-a: rgba(232, 160, 136, .18);
+  --mint-a: rgba(123, 184, 154, .18);
+  --lav-a: rgba(200, 159, 200, .18);
+  --sky-a: rgba(140, 184, 216, .18);
+  --rose-a: rgba(232, 146, 140, .18);
+  --butter-a: rgba(232, 200, 120, .18);
+
+  /* favicon 背板（亮色透明） */
+  --fav-bg: transparent;
+  --fav-radius: 4px;
+
+  /* 响应式断点 */
+  --bp-mobile: 640px;
+  --bp-tablet: 768px;
+  --bp-desktop: 1024px;
+}
+
+/* ===== 深色主题 — 暖棕夜色 ===== */
+body:has(#dm:checked) {
+  /* 背景：深暖棕黑 */
+  --bg: #1A1410;
+  --cream: #2A2018;
+
+  /* 分类色系 — 暗色下提亮以保证可见性 */
+  --peach: #C88860;
+  --mint: #6BB898;
+  --lav: #B88EC8;
+  --sky: #7AA8C8;
+  --rose: #D88878;
+  --butter: #D8B868;
+  --coral: #D89858;
+  --aqua: #5BB8A8;
+  --sage: #7BB868;
+  --lilac: #A88FC8;
+  --sand: #C8A868;
+  --foam: #6A98B0;
+  --cherry: #C86878;
+  --lemon: #C8B858;
+  --teal: #5BA898;
+  --mauve: #C87888;
+  --fog: #A89888;
+  --apricot: #D8A860;
+  --seafoam: #6BB898;
+  --blush: #D08898;
+  --mist: #8AA8B8;
+  --citrus: #D8B848;
+  --perwinkle: #8898C8;
+  --tangerine: #D88848;
+  --sage2: #98B868;
+  --berry: #C85878;
+  --dove: #A89888;
+  --amber: #E8923C;
+  --turquoise: #4FA898;
+  --violet: #9868B8;
+  --vermilion: #D85838;
+  --emerald: #4FA878;
+  --saffron: #E89848;
+  --mauve2: #B86888;
+  --olive: #A8A848;
+  --magenta: #B84898;
+  --jade: #4FB888;
+
+  /* 半透粉彩（暗色下保留辨识度） */
+  --peach-a: rgba(200, 136, 96, .20);
+  --mint-a: rgba(107, 184, 152, .20);
+  --lav-a: rgba(184, 142, 200, .22);
+  --sky-a: rgba(122, 168, 200, .20);
+  --rose-a: rgba(216, 136, 120, .20);
+  --butter-a: rgba(216, 184, 104, .20);
+
+  /* 文字色系：暖白，提亮 soft 保证可读性 */
+  --ink: #F5EFE5;
+  --ink2: #C8BCAE;
+  --soft: #9A8E80;
+
+  /* 主题色：亮色 + 饱和度 */
+  --pop: #F2A85A;
+  --pop2: #F27898;
+  --pop3: #C8B8E8;
+  --peach-dark: #D89868;
+
+  --on-pop: #1A1410;
+
+  /* 卡片/背景 — 提高透明度让卡片更明显 */
+  --card: rgba(255, 253, 248, .08);
+  --card-solid: #2A2018;
+  --card-solid2: #342A20;
+  --link-bg: rgba(255, 253, 248, .08);
+  --shadow: rgba(0, 0, 0, .50);
+
+  /* 分割线 / 光晕 — 提高可见度 */
+  --rule: rgba(255, 253, 248, .14);
+  --glow: rgba(242, 168, 90, .22);
+  --admin-divider: rgba(255, 253, 248, .14);
+
+  /* 背景渐变球颜色 — 暗色下降低透明度 */
+  --blob-1: rgba(242, 168, 90, .15);
+  --blob-2: rgba(123, 184, 154, .12);
+  --blob-3: rgba(200, 159, 200, .12);
+  --blob-4: rgba(140, 184, 216, .10);
+
+  /* 管理后台专用 — 暖棕夜色体系 */
+  --admin-sidebar: #1E1814;
+  --admin-header: #26201A;
+  --admin-surface: #2A221A;
+  --admin-surface-2: #322A20;
+  --admin-input: #332A20;
+  --admin-input-border: rgba(255, 253, 248, .16);
+  --admin-table-head: #2E2620;
+
+  /* favicon 背板（暗色半透明白底，托起深色图标） */
+  --fav-bg: rgba(255, 255, 255, .12);
+}

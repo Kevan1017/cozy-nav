@@ -1,0 +1,20 @@
+/* cozy·nav 响应式断点定义 */
+
+/* 手机（默认） */
+:root {
+  --grid-cols: 1;
+}
+
+/* 平板 ≥768px */
+@media (min-width: 768px) {
+  :root {
+    --grid-cols: 2;
+  }
+}
+
+/* 桌面 ≥1024px */
+@media (min-width: 1024px) {
+  :root {
+    --grid-cols: 3;
+  }
+}
