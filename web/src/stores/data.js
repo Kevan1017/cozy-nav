@@ -138,6 +138,13 @@ export const useDataStore = defineStore('data', () => {
     return res;
   }
 
+  /** 批量移动书签到目标分类（ids 为书签 ID 数组） */
+  async function batchMoveLinks(ids, categoryId) {
+    const res = await linkApi.batchMove(ids, categoryId);
+    await fetchCategories();
+    return res;
+  }
+
   /** 同步分类排序结果（后端已落库，仅更新本地 sort_order，避免全量刷新） */
   function updateCategoriesOrder(orders) {
     // orders: [{ id, sort_order }]，按 id 映射新排序权重
@@ -153,6 +160,6 @@ export const useDataStore = defineStore('data', () => {
     fetchCategories, ensurePublicLoaded, createCategory, updateCategory, deleteCategory,
     updateCategoriesOrder,
     createLink, updateLink, deleteLink, togglePin,
-    toggleCategoryLock, toggleLinkLock,
+    toggleCategoryLock, toggleLinkLock, batchMoveLinks,
   };
 });
