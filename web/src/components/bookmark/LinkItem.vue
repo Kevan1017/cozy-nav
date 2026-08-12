@@ -48,7 +48,7 @@ function handleOpen() {
 <template>
   <!-- 加密链接占位（未解锁时显示） -->
   <div v-if="link.is_locked && !unlocked" class="lk lk-locked" @click="emit('unlock')">
-    <div class="av av-locked">🔒</div>
+    <div v-if="!prefsStore.noImage" class="av av-locked">🔒</div>
     <div class="txt">
       <div class="nm nm-locked">已加密</div>
       <div class="dm">点击解锁查看</div>
@@ -73,7 +73,7 @@ function handleOpen() {
     </span>
     <!-- 有 favicon：用 FaviconImage（含加载失败回退字母头像） -->
     <FaviconImage
-      v-if="link.favicon_path"
+      v-if="link.favicon_path && !prefsStore.noImage"
       :url="link.url"
       :domain="link.domain"
       :favicon-path="link.favicon_path"
@@ -84,7 +84,7 @@ function handleOpen() {
     />
     <!-- 无 favicon：直接内联字母头像（免去组件实例，600+ 链接时显著减负） -->
     <div
-      v-else
+      v-else-if="!prefsStore.noImage"
       class="av"
       :style="{
         width: '32px',

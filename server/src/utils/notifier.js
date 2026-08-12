@@ -7,7 +7,7 @@
  *
  * 事件 events（"什么时候发、发什么"）：可扩展列表
  * - patrol：巡检结果
- * - gitBackup：Git 异地备份结果
+ * - backup：本地备份结果
  * - 未来新增事件：加一个事件默认配置 + 一个渲染器 + 调用一次 sendEvent 即可
  *
  * 配置存 preferences.notification_config（JSON），旧平铺结构自动迁移
@@ -45,8 +45,8 @@ export const DEFAULT_NOTIFICATION_CONFIG = {
       titleTemplate: '🩺 巡检发现 {issues} 条异常',          // 全正常时固定为"全部正常"
       bodyTemplate: '正常 {ok} · 需代理 {blocked} · 打不开 {fail} · 跳过 {skip}\n\n检测时间：{time}',
     },
-    // Git 异地备份结果
-    gitBackup: {
+    // 本地备份结果（成功/失败）
+    backup: {
       enabled: false,
       onSuccess: true,         // 备份成功时推送
       onFailure: true,         // 备份失败时推送
@@ -67,7 +67,7 @@ export const EVENT_PLACEHOLDERS = {
     { key: '{issues}', desc: '异常数（同 fail）' },
     { key: '{time}', desc: '推送时间' },
   ],
-  gitBackup: [
+  backup: [
     { key: '{result}', desc: '备份结果（成功/失败）' },
     { key: '{file}', desc: '快照文件名' },
     { key: '{size}', desc: '快照大小' },
@@ -123,6 +123,11 @@ export function getNotificationConfig() {
         delete parsed.bodyTemplate;
       }
     }
+    // 迁移 3：移除 Git 备份模块后，旧 events.gitBackup → events.backup
+    if (parsed.events?.gitBackup && !parsed.events.backup) {
+      parsed.events.backup = parsed.events.gitBackup;
+      delete parsed.events.gitBackup;
+    }
     // 深度合并默认值（channels/events 逐层兜底）
     return {
       ...DEFAULT_NOTIFICATION_CONFIG,
@@ -133,7 +138,7 @@ export function getNotificationConfig() {
       },
       events: {
         patrol: { ...DEFAULT_NOTIFICATION_CONFIG.events.patrol, ...(parsed.events?.patrol || {}) },
-        gitBackup: { ...DEFAULT_NOTIFICATION_CONFIG.events.gitBackup, ...(parsed.events?.gitBackup || {}) },
+        backup: { ...DEFAULT_NOTIFICATION_CONFIG.events.backup, ...(parsed.events?.backup || {}) },
       },
     };
   }
@@ -222,7 +227,7 @@ export async function sendAllChannels(channels, title, desp) {
 
 /**
  * 通用通知入口：按事件类型读取配置 → 条件判断 → 渲染模板 → 多渠道发送
- * @param {string} eventType - 事件标识（'patrol' | 'gitBackup'）
+ * @param {string} eventType - 事件标识（'patrol' | 'backup'）
  * @param {object} data - 事件数据（不同事件字段不同，见各渲染器）
  * @returns {Promise<boolean>} 是否实际发送
  */
@@ -260,8 +265,8 @@ const RENDERERS = {
     return { title, desp };
   },
 
-  /** Git 备份结果：按成功/失败开关决定是否推送 */
-  gitBackup: (event, data) => {
+  /** 备份结果：按成功/失败开关决定是否推送，WebDAV 云端状态附在正文末尾 */
+  backup: (event, data) => {
     const ok = !!data.ok;
     if (ok && !event.onSuccess) return null;
     if (!ok && !event.onFailure) return null;
@@ -273,11 +278,16 @@ const RENDERERS = {
       reason: ok ? '' : (data.reason || ''),
     };
     const title = renderTemplate(event.titleTemplate || '🛡️ 数据备份{result}', map, timeStr);
-    const desp = renderTemplate(
+    let desp = renderTemplate(
       event.bodyTemplate || '文件：{file}\n大小：{size}\n{reason}时间：{time}',
       map,
       timeStr
     );
+    // 云端坚果云上传状态（未启用 WebDAV 时不展示）
+    if (data.webdav) {
+      const w = data.webdav;
+      desp += `\n云端坚果云：${w.ok ? `已上传（${w.uploaded ?? 0} 个文件）` : `上传失败（${w.reason || '未知原因'}）`}`;
+    }
     return { title, desp };
   },
 };
@@ -295,7 +305,7 @@ export function notifyPatrolResult(stat) {
   return sendEvent('patrol', stat);
 }
 
-/** Git 备份结果通知（供 scheduler 调用，内部走通用入口） */
-export function notifyGitBackup(result) {
-  return sendEvent('gitBackup', result);
+/** 备份结果通知（供 scheduler/backupController 调用，内部走通用入口） */
+export function notifyBackup(result) {
+  return sendEvent('backup', result);
 }

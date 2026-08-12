@@ -19,7 +19,7 @@ const LOGO_MAX_SIZE = 300 * 1024;
 
 /** 读取偏好时可选的列 */
 const PREFS_COLUMNS =
-  'theme, search_engine, engine_display_count, theme_preset, show_domain, view_mode, view_layout_enabled, sort_enabled, font_family, font_switch_enabled, hero_tagline, festival_enabled, festival_countdown_enabled, idle_mark_enabled, custom_theme, site_title, site_logo, site_keywords, site_description, site_copyright, stat_tagline, health_config, notification_config, category_sort_mode, link_sort_mode';
+  'theme, search_engine, engine_display_count, theme_preset, show_domain, no_image, view_mode, view_layout_enabled, sort_enabled, font_family, font_switch_enabled, hero_tagline, festival_enabled, festival_countdown_enabled, idle_mark_enabled, custom_theme, site_title, site_logo, site_keywords, site_description, site_copyright, stat_tagline, health_config, notification_config, category_sort_mode, link_sort_mode';
 
 /** 巡检配置默认值（与 preferences.health_config 结构保持一致） */
 const DEFAULT_HEALTH_CONFIG = {
@@ -84,7 +84,7 @@ function parseNotificationConfig(raw) {
       },
       events: {
         patrol: { ...DEFAULT_NOTIFICATION_CONFIG.events.patrol, ...(parsed.events?.patrol || {}) },
-        gitBackup: { ...DEFAULT_NOTIFICATION_CONFIG.events.gitBackup, ...(parsed.events?.gitBackup || {}) },
+        backup: { ...DEFAULT_NOTIFICATION_CONFIG.events.backup, ...(parsed.events?.backup || {}) },
       },
     };
   }
@@ -144,7 +144,7 @@ export function getNotifyConfig(req, res) {
  */
 export function updatePreferences(req, res) {
   const {
-    theme, search_engine, engine_display_count, theme_preset, show_domain, view_mode, view_layout_enabled,
+    theme, search_engine, engine_display_count, theme_preset, show_domain, no_image, view_mode, view_layout_enabled,
     sort_enabled, font_family, font_switch_enabled, hero_tagline, festival_enabled, festival_countdown_enabled,
     idle_mark_enabled, custom_theme, site_title, site_logo, site_keywords, site_description, site_copyright,
     stat_tagline, health_config, notification_config, category_sort_mode, link_sort_mode,
@@ -157,7 +157,7 @@ export function updatePreferences(req, res) {
 
   db.prepare(
     `UPDATE preferences SET theme = ?, search_engine = ?, engine_display_count = ?, theme_preset = ?,
-     show_domain = ?, view_mode = ?, view_layout_enabled = ?, sort_enabled = ?, font_family = ?, font_switch_enabled = ?, hero_tagline = ?,
+     show_domain = ?, no_image = ?, view_mode = ?, view_layout_enabled = ?, sort_enabled = ?, font_family = ?, font_switch_enabled = ?, hero_tagline = ?,
      festival_enabled = ?, festival_countdown_enabled = ?, idle_mark_enabled = ?, custom_theme = ?,
      site_title = ?, site_logo = ?, site_keywords = ?, site_description = ?, site_copyright = ?,
      stat_tagline = ?, health_config = ?, notification_config = ?, category_sort_mode = ?, link_sort_mode = ?
@@ -168,6 +168,7 @@ export function updatePreferences(req, res) {
     engine_display_count ?? existing.engine_display_count,
     theme_preset ?? existing.theme_preset,
     show_domain ?? existing.show_domain,
+    no_image ?? existing.no_image,
     view_mode ?? existing.view_mode,
     view_layout_enabled ?? existing.view_layout_enabled,
     sort_enabled ?? existing.sort_enabled,
@@ -199,6 +200,7 @@ export function updatePreferences(req, res) {
     `displayCount=${engine_display_count || existing.engine_display_count} ` +
     `preset=${theme_preset || existing.theme_preset} ` +
     `showDomain=${show_domain ?? existing.show_domain} ` +
+    `noImage=${no_image ?? existing.no_image} ` +
     `viewMode=${view_mode || existing.view_mode} ` +
     `viewLayoutEnabled=${view_layout_enabled ?? existing.view_layout_enabled} ` +
     `sortEnabled=${sort_enabled ?? existing.sort_enabled} ` +

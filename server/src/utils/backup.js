@@ -5,12 +5,15 @@
  *   VACUUM INTO 与 better-sqlite3 的 backup 等效，均基于 SQLite 在线备份机制）
  * - favicons/：复制图标文件（排除 .failed 失败缓存，可随时重建）
  * - logo/：复制后台上传的站点 Logo（丢了需重新上传）
- * - 按 retainDays（默认 7 天）清理过期备份
+ * - 按 retainCount（默认 5 份）清理过期备份
+ * - 增量：数据无变化（数据指纹一致）时跳过备份，不生成新快照
  * 备份目录：server/data/backups/backup-YYYYMMDD-HHmmss/{cozy-nav.db, favicons/, logo/}
  */
 import db from '../db/index.js';
+import { createHash } from 'node:crypto';
 import {
   mkdirSync, existsSync, cpSync, rmSync, readdirSync, statSync,
+  readFileSync, writeFileSync,
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,24 +26,50 @@ export const BACKUP_DIR = join(DATA_DIR, 'backups');
 /** 需要排除的子目录（.failed 为 favicon 抓取失败缓存，可重建） */
 const EXCLUDE_DIRS = ['.failed'];
 
+/** 数据指纹计算时排除的条目（备份产物/临时缓存/自身指纹文件，不计入"数据变化"） */
+const HASH_EXCLUDE = new Set([
+  'backups',          // 历史备份快照
+  '.git',             // data 目录若曾初始化 git 仓库
+  '.failed',          // favicon 失败缓存
+  'backup-hash.json', // 上次备份指纹文件自身（内容含时间戳，必须排除）
+  'cozy-nav.db-journal', 'cozy-nav.db-wal', 'cozy-nav.db-shm', // SQLite 临时文件
+]);
+
+/** 上次备份指纹存储文件 */
+const HASH_FILE = join(DATA_DIR, 'backup-hash.json');
+
 /** 备份配置默认值（与 preferences.backup_config 结构保持一致） */
 export const DEFAULT_BACKUP_CONFIG = {
   autoEnabled: true,      // 是否启用每天 03:00 自动备份
   retainCount: 5,         // 本地备份保留份数（超出自动删除最旧的）
-  gitEnabled: false,      // 是否启用 Git 异地备份
-  gitRemote: '',          // Git 仓库地址（如 Gitee 私有仓库）
-  gitBranch: 'main',      // Git 分支
+  webdav: {               // 坚果云 WebDAV 云端备份（本地快照上传到云端双保险）
+    enabled: false,
+    url: 'https://dav.jianguoyun.com/dav/', // WebDAV 根地址
+    user: '',             // 坚果云账号（邮箱）
+    pass: '',             // 坚果云应用密码（非登录密码，需在坚果云网页端生成）
+    path: 'cozy-nav-backup', // 远端目录名（自动创建）
+    retainCount: 3,       // 云端保留份数（超出自动删除最旧的，节省坚果云空间）
+  },
 };
+
+/** 深度合并备份配置（webdav 为嵌套对象，需逐层兜底） */
+function mergeBackupConfig(base, extra = {}) {
+  return {
+    ...base,
+    ...extra,
+    webdav: { ...(base.webdav || {}), ...(extra.webdav || {}) },
+  };
+}
 
 /** 读取备份配置：preferences 表 JSON 字段 + 默认值兜底（不依赖 API 层） */
 export function getBackupConfig() {
   const row = db.prepare('SELECT backup_config FROM preferences WHERE id = 1').get();
   if (row?.backup_config) {
     try {
-      return { ...DEFAULT_BACKUP_CONFIG, ...JSON.parse(row.backup_config) };
+      return mergeBackupConfig(DEFAULT_BACKUP_CONFIG, JSON.parse(row.backup_config));
     } catch { /* 解析失败回退默认 */ }
   }
-  return { ...DEFAULT_BACKUP_CONFIG };
+  return { ...DEFAULT_BACKUP_CONFIG, webdav: { ...DEFAULT_BACKUP_CONFIG.webdav } };
 }
 
 /** 解析备份配置（供 API 层读取时兜底，兼容空/损坏 JSON） */
@@ -48,10 +77,10 @@ export function parseBackupConfig(raw) {
   try {
     const parsed = JSON.parse(raw || '');
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return { ...DEFAULT_BACKUP_CONFIG, ...parsed };
+      return mergeBackupConfig(DEFAULT_BACKUP_CONFIG, parsed);
     }
   } catch { /* 解析失败回退 */ }
-  return { ...DEFAULT_BACKUP_CONFIG };
+  return { ...DEFAULT_BACKUP_CONFIG, webdav: { ...DEFAULT_BACKUP_CONFIG.webdav } };
 }
 
 /** 递归复制目录（排除指定子目录） */
@@ -78,6 +107,59 @@ function dirSize(dir) {
     total += statSync(p).isDirectory() ? dirSize(p) : statSync(p).size;
   }
   return total;
+}
+
+/**
+ * 计算数据指纹（增量判断依据）
+ * 对 DATA_DIR 内所有有效文件递归计算 SHA-256（文件名 + 大小 + 修改时间 + 内容），
+ * 排除备份产物/缓存/临时文件。数据零变化时两次指纹一致 → 跳过备份。
+ * @returns {string|null} 指纹 hex；计算失败返回 null（调用方按"有变化"处理，保证不漏备）
+ */
+export function computeDataHash() {
+  try {
+    const hash = createHash('sha256');
+    const walk = (dir, rel) => {
+      for (const entry of readdirSync(dir).sort()) {
+        if (HASH_EXCLUDE.has(entry)) continue;
+        const p = join(dir, entry);
+        const relPath = rel ? `${rel}/${entry}` : entry;
+        const stat = statSync(p);
+        if (stat.isDirectory()) {
+          walk(p, relPath);
+        } else {
+          hash.update(relPath);
+          hash.update(String(stat.size));
+          hash.update(String(stat.mtimeMs));
+          hash.update(readFileSync(p));
+        }
+      }
+    };
+    walk(DATA_DIR, '');
+    return hash.digest('hex');
+  } catch (err) {
+    console.log(`[${new Date().toISOString()}] [备份] [指纹] [失败] ${err.message}`);
+    return null;
+  }
+}
+
+/** 读取上次备份时的数据指纹（无记录返回 null） */
+export function getLastBackupHash() {
+  try {
+    const raw = readFileSync(HASH_FILE, 'utf8');
+    return JSON.parse(raw)?.hash || null;
+  } catch { /* 文件不存在或损坏视为无记录 */ }
+  return null;
+}
+
+/** 保存本次备份后的数据指纹（供下次增量比对） */
+export function saveBackupHash(hash) {
+  try {
+    writeFileSync(HASH_FILE, JSON.stringify({ hash, at: new Date().toISOString() }));
+    return true;
+  } catch (err) {
+    console.log(`[${new Date().toISOString()}] [备份] [指纹] [保存失败] ${err.message}`);
+    return false;
+  }
 }
 
 /** 格式化时间戳：YYYYMMDD-HHmmss-FFF（含毫秒，避免同秒连续备份文件名冲突） */
@@ -156,7 +238,7 @@ function formatBackupTime(name) {
 
 /**
  * 列出最近备份记录（按时间倒序）
- * @returns {Array<{name:string, time:string, size:number, hasGit:boolean}>}
+ * @returns {Array<{name:string, time:string, size:number}>}
  */
 export function listBackups() {
   if (!existsSync(BACKUP_DIR)) return [];
@@ -165,12 +247,10 @@ export function listBackups() {
     .map((name) => {
       const dir = join(BACKUP_DIR, name);
       const stat = statSync(dir);
-      const gitMark = existsSync(join(dir, '.git-pushed'));
       return {
         name,
         time: formatBackupTime(name),
         size: dirSize(dir),
-        hasGit: gitMark,
       };
     })
     .sort((a, b) => (a.name < b.name ? 1 : -1));

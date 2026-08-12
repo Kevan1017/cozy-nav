@@ -38,6 +38,7 @@ import {
 } from 'naive-ui';
 import LinkFormModal from '../../components/admin/linkmanage/LinkFormModal.vue';
 import LinkTrashTable from '../../components/admin/linkmanage/LinkTrashTable.vue';
+import BatchAddModal from '../../components/admin/linkmanage/BatchAddModal.vue';
 import { renderAvatar } from '../../composables/useRenderCell.js';
 
 const dataStore = useDataStore();
@@ -97,6 +98,18 @@ function openEdit(link) {
   editingLink.value = link;
   modalMode.value = 'edit';
   modalShow.value = true;
+}
+
+/* ---------- 批量添加弹窗 ---------- */
+const batchShow = ref(false);
+
+function openBatchCreate() {
+  batchShow.value = true;
+}
+
+/** 批量添加成功后刷新书签列表 */
+async function handleBatchSuccess() {
+  await dataStore.fetchCategories();
 }
 
 const { pagination, syncItemCount, onPageSizeChange, onPageChange } = usePagination();
@@ -657,6 +670,7 @@ watch(
             @click="askBatchDelete"
           >批量删除 ({{ checkedRowKeys.length }})</n-button>
           <n-button secondary @click="openTrash">🗑 回收站</n-button>
+          <n-button secondary @click="openBatchCreate">📋 批量添加</n-button>
           <n-button type="primary" @click="openCreate">
             <template #icon>＋</template>
             新建书签
@@ -861,6 +875,13 @@ watch(
       :mode="modalMode"
       :link="editingLink"
       :cat-options="catOptions"
+    />
+
+    <!-- ============ 批量添加弹窗（子组件） ============ -->
+    <BatchAddModal
+      v-model:show="batchShow"
+      :cat-options="catOptions"
+      @success="handleBatchSuccess"
     />
 
     <!-- ============ 批量移动到分类弹窗 ============ -->

@@ -8,6 +8,7 @@ import { authMiddleware } from '../middlewares/auth.js';
 import { createRateLimiter } from '../middlewares/rateLimit.js';
 import {
   createLink,
+  batchCreateLinks,
   updateLink,
   deleteLink,
   getTrashLinks,
@@ -121,6 +122,24 @@ router.put(
   ],
   validate,
   batchMoveLinks
+);
+
+// POST /api/links/batch - 批量新建书签（多行粘贴，URL 命中重复时跳过该条）
+router.post(
+  '/batch',
+  authMiddleware,
+  [
+    body('category_id').isInt({ min: 1 }).withMessage('分类ID必须为正整数'),
+    body('items').isArray({ min: 1, max: 100 }).withMessage('items 必须为 1-100 条书签'),
+    body('items.*.name').optional().isString().withMessage('书签名称必须为字符串'),
+    body('items.*.url')
+      .notEmpty()
+      .withMessage('URL不能为空')
+      .isURL({ protocols: ['http', 'https'], require_protocol: true })
+      .withMessage('URL 必须以 http:// 或 https:// 开头'),
+  ],
+  validate,
+  batchCreateLinks
 );
 
 // POST /api/links - 新建书签

@@ -1,16 +1,15 @@
 /**
  * 备份控制器
- * - 备份配置读写（preferences.backup_config）
- * - 立即备份（本地快照 + 可选 Git 推送）
+ * - 备份配置读写（preferences.backup_config，含坚果云 WebDAV 云端备份）
+ * - 立即备份（本地快照 + 增量跳过 + 云端上传）
+ * - WebDAV 连接测试
  * - 最近备份记录列表
  */
 import db from '../db/index.js';
 import { jsonSuccess, jsonError } from '../utils/response.js';
-import { runLocalBackup, listBackups, parseBackupConfig, DEFAULT_BACKUP_CONFIG, DATA_DIR } from '../utils/backup.js';
-import { pushToGit, isGitRepoReady } from '../utils/gitBackup.js';
-import { notifyGitBackup } from '../utils/notifier.js';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { listBackups, parseBackupConfig, DEFAULT_BACKUP_CONFIG, DATA_DIR } from '../utils/backup.js';
+import { triggerBackupNow } from '../utils/scheduler.js';
+import { testWebDAVConnection } from '../utils/webdavBackup.js';
 
 /**
  * 读取备份配置
@@ -20,27 +19,28 @@ export function getBackupConfig(req, res) {
   const row = db.prepare('SELECT backup_config FROM preferences WHERE id = 1').get();
   const config = parseBackupConfig(row?.backup_config);
   // dataDir 返回服务器真实的数据目录，供前端引导文案动态展示
-  return jsonSuccess(res, { ...config, gitRepoReady: isGitRepoReady(), dataDir: DATA_DIR });
+  return jsonSuccess(res, { ...config, dataDir: DATA_DIR });
 }
 
 /**
  * 保存备份配置
  * PUT /api/backup/config
- * 请求体：{ autoEnabled?, retainCount?, gitEnabled?, gitRemote?, gitBranch? }
+ * 请求体：{ autoEnabled?, retainCount?, webdav?: {enabled?, url?, user?, pass?, path?} }
+ * 说明：webdav.pass 留空且已有密码时保留原值（前端提示「不修改请留空」）
  */
 export function updateBackupConfig(req, res) {
   const row = db.prepare('SELECT backup_config FROM preferences WHERE id = 1').get();
   const existing = parseBackupConfig(row?.backup_config);
-  const {
-    autoEnabled, retainCount, gitEnabled, gitRemote, gitBranch,
-  } = req.body;
+  const { autoEnabled, retainCount, webdav } = req.body;
+
+  const nextWebdav = { ...existing.webdav, ...(webdav || {}) };
+  // 密码留空 = 保留原值（防止前端回显空密码覆盖）
+  if (!webdav?.pass && existing.webdav?.pass) nextWebdav.pass = existing.webdav.pass;
 
   const next = {
     autoEnabled: autoEnabled ?? existing.autoEnabled,
     retainCount: retainCount ?? existing.retainCount,
-    gitEnabled: gitEnabled ?? existing.gitEnabled,
-    gitRemote: ((gitRemote ?? existing.gitRemote) || '').trim(),
-    gitBranch: ((gitBranch ?? existing.gitBranch) || 'main').trim() || 'main',
+    webdav: nextWebdav,
   };
 
   db.prepare('UPDATE preferences SET backup_config = ? WHERE id = 1').run(JSON.stringify(next));
@@ -48,61 +48,51 @@ export function updateBackupConfig(req, res) {
   console.log(
     `[${new Date().toISOString()}] [备份] [配置] [成功] ` +
     `autoEnabled=${next.autoEnabled} retainCount=${next.retainCount} ` +
-    `gitEnabled=${next.gitEnabled} remote=${next.gitRemote || '空'} branch=${next.gitBranch}`
+    `webdav=${next.webdav?.enabled ? '启用' : '关闭'}`
   );
 
-  return jsonSuccess(res, { ...next, gitRepoReady: isGitRepoReady() }, '备份配置已保存');
+  return jsonSuccess(res, { ...next }, '备份配置已保存');
 }
 
 /**
- * 立即备份（手动触发）
+ * 立即备份（手动触发，忽略自动备份开关，遵循增量跳过；启用 WebDAV 时同步上传云端）
  * POST /api/backup/run
- * 请求体（可选）：{ pushGit?: boolean }  默认跟随配置 gitEnabled
  */
 export async function runBackupNow(req, res) {
-  const row = db.prepare('SELECT backup_config FROM preferences WHERE id = 1').get();
-  const config = parseBackupConfig(row?.backup_config);
-  const shouldPush = req.body?.pushGit ?? config.gitEnabled;
-
-  const result = runLocalBackup();
+  const result = await triggerBackupNow();
+  if (result.skipped) {
+    return jsonSuccess(res, { skipped: true, reason: result.reason }, result.reason);
+  }
   if (!result.ok) {
-    // 本地备份失败：若开启了 Git 备份，同样通知管理员（与定时备份行为一致）
-    if (config.gitEnabled) {
-      notifyGitBackup({ ok: false, file: '', size: '', reason: result.error || '本地备份失败' });
-    }
-    return jsonError(res, `备份失败：${result.error || '未知错误'}`, 500);
+    return jsonError(res, `备份失败：${result.reason || '未知错误'}`, 500);
   }
-
-  let git = { pushed: false, reason: '未启用 Git 备份' };
-  if (shouldPush) {
-    git = await pushToGit({ remote: config.gitRemote, branch: config.gitBranch });
-    if (git.pushed) {
-      try {
-        // 备份目录写入推送标记，供「最近备份记录」显示推送状态
-        writeFileSync(join(result.dir, '.git-pushed'), String(Date.now()));
-      } catch { /* 标记写入失败忽略 */ }
-    }
-    // 通知：Git 推送结果（成功/失败），与定时备份保持一致
-    notifyGitBackup({
-      ok: git.pushed,
-      file: result.file,
-      size: formatBackupSize(result.size),
-      reason: git.reason || '',
-    });
-  }
-
+  const msg = result.webdav
+    ? (result.webdav.ok ? '备份完成，已上传坚果云' : '备份完成，但坚果云上传失败')
+    : '备份完成';
   return jsonSuccess(
     res,
     {
       file: result.file,
       size: result.size,
       time: result.file.replace('backup-', ''),
-      git,
+      webdav: result.webdav || null,
     },
-    git.pushed
-      ? '备份完成，已推送到 Git 仓库'
-      : (shouldPush ? `本地备份完成，但 Git 推送失败：${git.reason || '未知原因'}` : '备份完成')
+    msg
   );
+}
+
+/**
+ * 测试坚果云 WebDAV 连接（用请求体配置实时测试，不保存）
+ * POST /api/backup/webdav-test
+ * 请求体：{ webdav: {url, user, pass, path} }
+ */
+export async function testWebdav(req, res) {
+  const { url, user, pass, path } = req.body?.webdav || {};
+  const result = await testWebDAVConnection({ url, user, pass, path });
+  if (result.ok) {
+    return jsonSuccess(res, {}, '坚果云连接成功，可正常备份');
+  }
+  return jsonError(res, `连接失败：${result.reason || '未知原因'}`, 400);
 }
 
 /**
@@ -111,14 +101,6 @@ export async function runBackupNow(req, res) {
  */
 export function getBackupList(req, res) {
   return jsonSuccess(res, listBackups());
-}
-
-/** 备份大小格式化（B/KB/MB），用于通知消息展示 */
-function formatBackupSize(bytes) {
-  if (!bytes) return '-';
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-  return `${(bytes / 1024 / 1024).toFixed(2)}MB`;
 }
 
 export { DEFAULT_BACKUP_CONFIG };

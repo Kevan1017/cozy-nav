@@ -201,7 +201,7 @@ setInterval(cleanExpiredFailedRecords, 24 * 60 * 60 * 1000);
 // 启动链接健康定时巡检（配置在 preferences.health_config，每轮结束后动态重排）
 startHealthPatrol();
 
-// 启动每日自动备份（配置在 preferences.backup_config，每天 03:00 本地快照 + Git 异地）
+// 启动每日自动备份（配置在 preferences.backup_config，每天 03:00 本地快照，数据无变化自动跳过）
 startDailyBackup();
 
 // 启动服务

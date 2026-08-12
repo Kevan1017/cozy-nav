@@ -341,6 +341,12 @@ function migrateDatabase() {
     console.log('[数据库] preferences 表已添加 show_domain 列');
   } catch { /* 列已存在则忽略 */ }
 
+  // 迁移：preferences 表补 no_image 列（无图模式，1=隐藏 favicon/字母头像 0=显示）
+  try {
+    db.exec('ALTER TABLE preferences ADD COLUMN no_image INTEGER DEFAULT 0');
+    console.log('[数据库] preferences 表已添加 no_image 列');
+  } catch { /* 列已存在则忽略 */ }
+
   // 迁移：preferences 表补 view_mode 列（视图模式：card / list / compact）
   try {
     db.exec("ALTER TABLE preferences ADD COLUMN view_mode TEXT DEFAULT 'card'");
@@ -543,7 +549,7 @@ function migrateDatabase() {
     console.log('[数据库] preferences 表已添加 notification_config 列');
   } catch { /* 列已存在则忽略 */ }
 
-  // 迁移：preferences 表补 backup_config 列（备份配置 JSON：autoEnabled/retainDays/gitEnabled/gitRemote/gitBranch）
+  // 迁移：preferences 表补 backup_config 列（备份配置 JSON：autoEnabled/retainCount）
   try {
     db.exec('ALTER TABLE preferences ADD COLUMN backup_config TEXT');
     console.log('[数据库] preferences 表已添加 backup_config 列');

@@ -16,6 +16,8 @@ import {
   NUpload,
   NSpace,
   NDropdown,
+  NAlert,
+  NTag,
   useMessage,
 } from 'naive-ui';
 import { exportJSON, exportBookmarks, importJSON, importBookmarks } from '../../../api/importExport.js';
@@ -58,6 +60,7 @@ const importStrategy = ref('skip');
 const importFile = ref(null);
 const importFileName = ref('');
 const importing = ref(false);
+const importResult = ref(null); // 导入结果统计 { categoriesCreated, categoriesReused, linksCreated, linksUpdated, linksSkipped, skippedDetails }
 
 const strategyOptions = [
   { label: '跳过重复', value: 'skip' },
@@ -80,24 +83,34 @@ async function handleImport() {
   try {
     const content = await importFile.value.text();
 
+    let res;
     if (importTab.value === 'json') {
-      const data = JSON.parse(content);
-      await importJSON(data, importStrategy.value);
+      res = await importJSON(JSON.parse(content), importStrategy.value);
     } else {
-      await importBookmarks(content, importStrategy.value);
+      res = await importBookmarks(content, importStrategy.value);
     }
 
     // 刷新分类数据，让分类管理/书签管理页立即显示导入的新数据
     await dataStore.fetchCategories();
 
-    message.success('导入成功');
-    showImportModal.value = false;
+    // 保存统计并展示导入结果报告
+    importResult.value = res.data;
+    message.success('导入完成');
     importFile.value = null;
+    importFileName.value = '';
   } catch (err) {
     message.error(err.message || '导入失败');
   } finally {
     importing.value = false;
   }
+}
+
+/** 关闭弹窗并清空导入状态（含上一次的结果报告） */
+function closeImportModal() {
+  showImportModal.value = false;
+  importResult.value = null;
+  importFile.value = null;
+  importFileName.value = '';
 }
 </script>
 
@@ -136,6 +149,7 @@ async function handleImport() {
     preset="card"
     :style="{ maxWidth: '480px' }"
     mask-closable
+    @update:show="(v) => { if (!v) closeImportModal(); }"
   >
     <div class="import-content">
       <n-tabs v-model:value="importTab" type="line">
@@ -151,38 +165,55 @@ async function handleImport() {
         </n-tab-pane>
       </n-tabs>
 
-      <div class="import-section">
-        <div class="section-label">导入策略</div>
-        <n-radio-group v-model:value="importStrategy">
-          <n-radio
-            v-for="opt in strategyOptions"
-            :key="opt.value"
-            :value="opt.value"
-          >
-            {{ opt.label }}
-          </n-radio>
-        </n-radio-group>
-      </div>
+      <!-- 导入结果报告 -->
+      <n-alert v-if="importResult" type="success" :show-icon="true" class="import-result">
+        <div class="result-title">导入完成</div>
+        <div class="result-stats">
+          <n-tag size="small" type="info" :bordered="false">分类 · 新建 {{ importResult.categoriesCreated }} · 复用 {{ importResult.categoriesReused }}</n-tag>
+          <n-tag size="small" type="success" :bordered="false">链接 · 新增 {{ importResult.linksCreated }} · 更新 {{ importResult.linksUpdated }}</n-tag>
+          <n-tag v-if="importResult.linksSkipped" size="small" type="warning" :bordered="false">跳过 {{ importResult.linksSkipped }}</n-tag>
+        </div>
+        <ul v-if="importResult.skippedDetails?.length" class="skip-list">
+          <li v-for="(s, i) in importResult.skippedDetails" :key="i">{{ s.name || s.url }} — {{ s.reason }}</li>
+          <li v-if="importResult.linksSkipped > importResult.skippedDetails.length">… 其余 {{ importResult.linksSkipped - importResult.skippedDetails.length }} 条已省略</li>
+        </ul>
+      </n-alert>
 
-      <div class="import-section">
-        <div class="section-label">选择文件</div>
-        <n-upload
-          :accept="importTab === 'json' ? '.json' : '.html,.htm'"
-          :max="1"
-          @change="handleImportSelect"
-        >
-          <n-button>📁 选择文件</n-button>
-        </n-upload>
-        <p v-if="importFileName" class="file-hint">
-          已选择：{{ importFileName }}
-        </p>
-      </div>
+      <template v-if="!importResult">
+        <div class="import-section">
+          <div class="section-label">导入策略</div>
+          <n-radio-group v-model:value="importStrategy">
+            <n-radio
+              v-for="opt in strategyOptions"
+              :key="opt.value"
+              :value="opt.value"
+            >
+              {{ opt.label }}
+            </n-radio>
+          </n-radio-group>
+        </div>
+
+        <div class="import-section">
+          <div class="section-label">选择文件</div>
+          <n-upload
+            :accept="importTab === 'json' ? '.json' : '.html,.htm'"
+            :max="1"
+            @change="handleImportSelect"
+          >
+            <n-button>📁 选择文件</n-button>
+          </n-upload>
+          <p v-if="importFileName" class="file-hint">
+            已选择：{{ importFileName }}
+          </p>
+        </div>
+      </template>
     </div>
 
     <template #footer>
       <n-space justify="end">
-        <n-button @click="showImportModal = false">取消</n-button>
+        <n-button @click="closeImportModal">{{ importResult ? '完成' : '取消' }}</n-button>
         <n-button
+          v-if="!importResult"
           type="primary"
           :loading="importing"
           @click="handleImport"
@@ -249,6 +280,33 @@ async function handleImport() {
 }
 :deep(.n-tab-pane) {
   padding: 12px 0;
+}
+
+/* 导入结果报告 */
+.import-result {
+  margin-bottom: 4px;
+}
+.result-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.result-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.skip-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  max-height: 140px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--admin-muted);
+}
+.skip-list li:first-child {
+  margin-top: 4px;
 }
 
 /* 移动端适配 */

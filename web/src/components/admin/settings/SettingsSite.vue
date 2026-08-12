@@ -173,6 +173,16 @@ async function handleToggleIdleMark(val) {
   }
 }
 
+/** 无图模式开关 */
+async function handleToggleNoImage(val) {
+  try {
+    await prefsStore.updateNoImage(val);
+    message.success(val ? '无图模式已开启' : '无图模式已关闭');
+  } catch (err) {
+    message.warning(err.message || '保存失败');
+  }
+}
+
 /* ---------- 视图布局 ---------- */
 /** 视图布局功能开关 */
 async function handleToggleViewLayout(val) {
@@ -445,6 +455,18 @@ onMounted(() => {
           <n-switch
             :value="prefsStore.idleMarkEnabled"
             @update:value="handleToggleIdleMark"
+          />
+        </div>
+
+        <!-- 无图模式开关 -->
+        <div class="display-row">
+          <div class="display-info">
+            <div class="display-title">无图模式</div>
+            <div class="display-desc">前台隐藏书签的网站图标与字母头像，卡片只显示文字，视觉更简洁且节省流量</div>
+          </div>
+          <n-switch
+            :value="prefsStore.noImage"
+            @update:value="handleToggleNoImage"
           />
         </div>
 
