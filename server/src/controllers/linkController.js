@@ -57,6 +57,16 @@ export function recordVisit(req, res) {
   return jsonSuccess(res, null, '已记录访问');
 }
 
+/** 从 URL 解析域名（hostname），解析失败返回 null（创建/编辑书签时兜底补全 domain） */
+function extractDomain(url) {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 新建书签
  * POST /api/links
@@ -109,7 +119,7 @@ export async function createLink(req, res) {
   const result = db.prepare(`
     INSERT INTO links (category_id, name, url, domain, avatar_text, avatar_color, sort_order, note, url_normalized, favicon_path, favicon_status)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(category_id, name, url, domain || null, avatar_text || null, avatar_color || null, nextSort, note || '', normalized, faviconPath, faviconPath ? 'ok' : null);
+  `).run(category_id, name, url, domain || extractDomain(url), avatar_text || null, avatar_color || null, nextSort, note || '', normalized, faviconPath, faviconPath ? 'ok' : null);
 
   const newLink = db.prepare('SELECT * FROM links WHERE id = ?').get(result.lastInsertRowid);
 
@@ -162,7 +172,7 @@ export function updateLink(req, res) {
     category_id ?? existing.category_id,
     name ?? existing.name,
     url ?? existing.url,
-    domain ?? existing.domain,
+    domain ?? extractDomain(finalUrl) ?? existing.domain,
     avatar_text ?? existing.avatar_text,
     avatar_color ?? existing.avatar_color,
     sort_order ?? existing.sort_order,
