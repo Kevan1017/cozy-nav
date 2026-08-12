@@ -61,7 +61,8 @@ async function listRemoteSnapshots(dirUrl, headers) {
     return null;
   }
   const xml = await res.text();
-  const hrefs = [...xml.matchAll(/<D?:href>([^<]+)<\/D?:href>/g)].map((m) => m[1]);
+  // 兼容不同 WebDAV 服务器的命名空间前缀（<d:href> / <D:href> / <href> / <DAV:href>）
+  const hrefs = [...xml.matchAll(/<(?:\w+:)?href>([^<]+)<\/(?:\w+:)?href>/g)].map((m) => m[1]);
   const names = hrefs
     .map((h) => decodeURIComponent(h).split('/').filter(Boolean).pop() || '')
     .filter((n) => n.startsWith('backup-'));
