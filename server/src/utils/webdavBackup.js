@@ -52,12 +52,19 @@ async function listRemoteSnapshots(dirUrl, headers) {
     headers: { ...headers, Depth: '1' },
     signal: AbortSignal.timeout(TIMEOUT_SMALL),
   });
-  if (!res.ok && res.status !== 207) return null;
+  if (!res.ok && res.status !== 207) {
+    console.log(`[${new Date().toISOString()}] [备份] [WebDAV] [PROPFIND] 失败 HTTP ${res.status}，跳过云端清理`);
+    return null;
+  }
   const xml = await res.text();
   const hrefs = [...xml.matchAll(/<D?:href>([^<]+)<\/D?:href>/g)].map((m) => m[1]);
-  return hrefs
+  const names = hrefs
     .map((h) => decodeURIComponent(h).split('/').filter(Boolean).pop() || '')
     .filter((n) => n.startsWith('backup-'));
+  if (names.length === 0) {
+    console.log(`[${new Date().toISOString()}] [备份] [WebDAV] [PROPFIND] 响应中未解析到 backup-* 快照（href 共 ${hrefs.length} 个），检查 Depth/响应格式`);
+  }
+  return names;
 }
 
 /** 删除远端目录（DELETE 递归删除，404 视为已删除） */
@@ -143,12 +150,20 @@ export async function uploadBackupToWebDAV({ dir, snap, config, retainCount = 3,
     const list = await listRemoteSnapshots(baseDirUrl, headers);
     if (list) {
       const toDelete = list.sort().reverse().slice(retainCount);
+      console.log(
+        `[${new Date().toISOString()}] [备份] [WebDAV] [清理] 远端快照 ${list.length} 个，保留 ${retainCount} 份，待删 ${toDelete.length} 个`
+      );
       for (const name of toDelete) {
         if (name === snap) continue; // 绝不删除本次快照
-        if (await deleteRemote(remoteUrl(base, path, name), headers)) {
+        const ok = await deleteRemote(remoteUrl(base, path, name), headers);
+        if (ok) {
           console.log(`[${new Date().toISOString()}] [备份] [WebDAV] [清理] 已删除远端旧快照 ${name}`);
+        } else {
+          console.log(`[${new Date().toISOString()}] [备份] [WebDAV] [清理] 删除失败：${name}（DELETE 未返回 2xx/404）`);
         }
       }
+    } else {
+      console.log(`[${new Date().toISOString()}] [备份] [WebDAV] [清理] 未获取到远端快照列表（PROPFIND 失败），本次跳过清理`);
     }
 
     console.log(
