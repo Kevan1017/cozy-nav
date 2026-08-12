@@ -47,9 +47,12 @@ async function mkcol(url, headers) {
 
 /** PROPFIND 列出远程目录下的 backup-* 子目录名（按 href 提取，失败返回 null） */
 async function listRemoteSnapshots(dirUrl, headers) {
+  // 注意：坚果云等 WebDAV 服务器要求 PROPFIND 携带标准 propfind 请求体，
+  // 否则会返回空响应（拿不到 href），导致云端清理失效
   const res = await fetch(dirUrl, {
     method: 'PROPFIND',
-    headers: { ...headers, Depth: '1' },
+    headers: { ...headers, Depth: '1', 'Content-Type': 'application/xml' },
+    body: '<?xml version="1.0" encoding="utf-8"?><D:propfind xmlns:D="DAV:"><D:allprop/></D:propfind>',
     signal: AbortSignal.timeout(TIMEOUT_SMALL),
   });
   if (!res.ok && res.status !== 207) {
