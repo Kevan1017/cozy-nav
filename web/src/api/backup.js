@@ -14,9 +14,14 @@ export const backupApi = {
     return request.put('/backup/config', data);
   },
 
-  /** 立即备份（可选 pushGit 覆盖 Git 推送开关） */
-  runNow(pushGit) {
-    return request.post('/backup/run', { pushGit });
+  /** 立即备份（增量判断：数据无变化则跳过；启用 WebDAV 同步上传云端） */
+  runNow() {
+    return request.post('/backup/run');
+  },
+
+  /** 测试坚果云 WebDAV 连接（不保存配置） */
+  testWebdav(data) {
+    return request.post('/backup/webdav-test', { webdav: data });
   },
 
   /** 最近备份记录列表 */

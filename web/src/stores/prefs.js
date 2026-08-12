@@ -29,6 +29,8 @@ export const usePrefsStore = defineStore('prefs', () => {
   const themePreset = ref(migratePresetKey(localStorage.getItem('themePreset')));
   /** 是否在前台显示域名（默认显示） */
   const showDomain = ref(localStorage.getItem('showDomain') !== '0');
+  /** 无图模式（默认关闭）：开启后前台隐藏 favicon / 字母头像，纯文字卡片 */
+  const noImage = ref(localStorage.getItem('noImage') === '1');
   /** 视图模式：card（卡片）/ list（列表）/ compact（紧凑） */
   const viewMode = ref(localStorage.getItem('viewMode') || 'card');
   /** 视图布局功能开关（默认开启）：开启后可后台设置默认布局、前台手动切换仅本地生效 */
@@ -90,6 +92,10 @@ export const usePrefsStore = defineStore('prefs', () => {
     // show_domain 后端存 0/1，转 boolean
     if (res.data.show_domain !== undefined && res.data.show_domain !== null) {
       showDomain.value = !!res.data.show_domain;
+    }
+    // no_image 后端存 0/1，转 boolean
+    if (res.data.no_image !== undefined && res.data.no_image !== null) {
+      noImage.value = !!res.data.no_image;
     }
     // 视图布局功能开关（站点级配置，同步到本地以便前台按钮显隐）
     if (res.data.view_layout_enabled !== undefined && res.data.view_layout_enabled !== null) {
@@ -204,6 +210,15 @@ export const usePrefsStore = defineStore('prefs', () => {
     localStorage.setItem('showDomain', val ? '1' : '0');
     if (localStorage.getItem('token')) {
       await prefsApi.update({ show_domain: val ? 1 : 0 });
+    }
+  }
+
+  /** 更新无图模式（后台设置，全站生效） */
+  async function updateNoImage(val) {
+    noImage.value = val;
+    localStorage.setItem('noImage', val ? '1' : '0');
+    if (localStorage.getItem('token')) {
+      await prefsApi.update({ no_image: val ? 1 : 0 });
     }
   }
 
@@ -379,6 +394,7 @@ export const usePrefsStore = defineStore('prefs', () => {
     localStorage.setItem('searchEngine', searchEngine.value);
     localStorage.setItem('themePreset', themePreset.value);
     localStorage.setItem('showDomain', showDomain.value ? '1' : '0');
+    localStorage.setItem('noImage', noImage.value ? '1' : '0');
     localStorage.setItem('viewMode', viewMode.value);
     localStorage.setItem('viewLayoutEnabled', viewLayoutEnabled.value ? '1' : '0');
     localStorage.setItem('fontFamily', fontFamily.value);
@@ -402,6 +418,7 @@ export const usePrefsStore = defineStore('prefs', () => {
     searchEngine,
     themePreset,
     showDomain,
+    noImage,
     viewMode,
     viewLayoutEnabled,
     defaultViewMode,
@@ -425,6 +442,7 @@ export const usePrefsStore = defineStore('prefs', () => {
     updateSearchEngine,
     updateThemePreset,
     updateShowDomain,
+    updateNoImage,
     updateViewMode,
     updateViewLayoutEnabled,
     updateDefaultViewMode,

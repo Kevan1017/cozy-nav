@@ -2,7 +2,7 @@
 /**
  * 后台 - 通知中心（独立菜单页，从链接巡检抽离）
  * - 推送渠道（channels）：Server酱 / QQ 邮箱 —— "怎么发"，全局一份
- * - 推送事件（events）：巡检结果 / Git 备份结果 —— "什么时候发、发什么"，可扩展
+ * - 推送事件（events）：巡检结果 / 本地备份结果 —— "什么时候发、发什么"，可扩展
  * 页面持有完整配置，任一卡片点保存都整包提交，避免互相覆盖
  */
 import { ref, onMounted } from 'vue';
@@ -37,7 +37,7 @@ async function load() {
       },
       events: {
         patrol: { ...(cfg.events?.patrol || {}) },
-        gitBackup: { ...(cfg.events?.gitBackup || {}) },
+        backup: { ...(cfg.events?.backup || {}) },
       },
     };
   } catch { /* 未登录等场景静默 */ }

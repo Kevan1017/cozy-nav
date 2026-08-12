@@ -9,6 +9,11 @@ export const linkApi = {
     return request.post('/links', data);
   },
 
+  /** 批量新建书签（items: [{ name, url, avatar_text, avatar_color }]） */
+  batchCreate(categoryId, items) {
+    return request.post('/links/batch', { category_id: categoryId, items });
+  },
+
   /** 编辑书签 */
   update(id, data) {
     return request.put(`/links/${id}`, data);

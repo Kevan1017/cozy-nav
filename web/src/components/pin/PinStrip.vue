@@ -6,12 +6,14 @@
  * - 头像优先显示 favicon，加载失败回退字母头像
  */
 import FaviconImage from '../ui/FaviconImage.vue';
+import { usePrefsStore } from '../../stores/prefs.js';
 
 defineProps({
   links: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits(['open']);
+const prefsStore = usePrefsStore();
 
 /** 格式化序号 */
 function rankText(index) {
@@ -39,6 +41,7 @@ function rankText(index) {
       >
         <div class="top-row">
           <FaviconImage
+            v-if="!prefsStore.noImage"
             :url="link.url"
             :domain="link.domain"
             :favicon-path="link.favicon_path"

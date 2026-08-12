@@ -136,6 +136,70 @@ export async function createLink(req, res) {
 }
 
 /**
+ * 批量新建书签
+ * POST /api/links/batch
+ * 事务内逐条创建：URL 规范化判重（命中即跳过并记录原因，不返回 409 打断整批）；
+ * favicon 在事务提交后异步抓取，不阻塞响应
+ */
+export function batchCreateLinks(req, res) {
+  const { category_id, items } = req.body;
+
+  // 校验分类是否存在
+  const category = db.prepare('SELECT id FROM categories WHERE id = ? AND deleted_at IS NULL').get(category_id);
+  if (!category) {
+    return jsonError(res, '分类不存在');
+  }
+
+  // 预取该分类现有 URL 规范化值，避免循环内重复查询
+  const existing = new Set(
+    db.prepare('SELECT url_normalized FROM links WHERE category_id = ? AND deleted_at IS NULL')
+      .all(category_id)
+      .map(r => r.url_normalized)
+  );
+
+  const created = []; // { index, id, url } 本批成功创建
+  const skipped = []; // { index, name, url, reason } 被跳过的条目
+
+  db.exec('BEGIN');
+  try {
+    for (let i = 0; i < items.length; i++) {
+      const { name = '', url = '', avatar_text = null, avatar_color = null } = items[i] || {};
+      const normalized = normalizeUrl(url);
+      // 规范化失败或已存在（含本批新增）→ 跳过并记录原因
+      if (!normalized || existing.has(normalized)) {
+        skipped.push({ index: i + 1, name: name || url || `第${i + 1}条`, url, reason: normalized ? '已存在' : 'URL 无效' });
+        continue;
+      }
+      // 自动排到该分类末尾（分类内最大权重 + 1），避免新增书签权重相同
+      const nextSort = db.prepare(
+        'SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM links WHERE category_id = ? AND deleted_at IS NULL'
+      ).get(category_id).next;
+      const result = db.prepare(`
+        INSERT INTO links (category_id, name, url, domain, avatar_text, avatar_color, sort_order, note, url_normalized)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(category_id, name, url, extractDomain(url), avatar_text, avatar_color, nextSort, '', normalized);
+      existing.add(normalized);
+      created.push({ index: i + 1, id: Number(result.lastInsertRowid), url });
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    console.log(`[${new Date().toISOString()}] [书签] [批量新增] [失败] ${err.message}`);
+    return jsonError(res, '批量创建失败');
+  }
+
+  // favicon 异步抓取（不阻塞响应）
+  for (const c of created) {
+    setImmediate(() => {
+      fetchFaviconAsync(c.url, c.id).catch(() => {});
+    });
+  }
+
+  console.log(`[${new Date().toISOString()}] [书签] [批量新增] [成功] 新增 ${created.length} / 跳过 ${skipped.length}`);
+  return jsonSuccess(res, { created: created.length, skipped }, '批量创建成功');
+}
+
+/**
  * 编辑书签
  * PUT /api/links/:id
  */
