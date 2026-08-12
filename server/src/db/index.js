@@ -585,19 +585,32 @@ function migrateDatabase() {
     console.log('[数据库] 健康巡检索引已就绪');
   } catch (err) { console.log('[数据库] 索引创建失败', err.message); }
 
-  // 迁移：更新记录表（后台「关于悦行」维护，记录每次版本修复内容，幂等建表 + 空表种子）
+  // 迁移：更新记录表（后台「关于悦行」维护，记录每次版本修复内容，幂等建表 + 按版本补充缺失记录）
   db.exec(`CREATE TABLE IF NOT EXISTS changelog (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     version     TEXT NOT NULL,      -- 版本号，如 1.0.1
     description TEXT NOT NULL,      -- 本次改动说明
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
-  const hasChangelog = db.prepare('SELECT COUNT(*) as count FROM changelog').get();
-  if (hasChangelog.count === 0) {
-    const seedChangelog = db.prepare('INSERT INTO changelog (version, description) VALUES (?, ?)');
-    seedChangelog.run('1.0.0', '🎉 首个正式版本：书签管理 / 多搜索引擎 / 链接巡检 / 访问统计 / 保险库 / 自动备份 / 多主题 / 浏览器扩展 / 双端适配');
-    seedChangelog.run('1.0.1', '🐛 修复：新建/编辑书签未自动解析域名，导致「域名」列空白；新增 fix-link-domain.js 一键补全历史空域名');
-    console.log('[数据库] 更新记录种子已写入（v1.0.0 / v1.0.1）');
+  // 基础更新记录：新部署写入全部，存量库按 version 幂等补充缺失版本（后台手动维护的记录不会被覆盖）
+  const baseChangelog = [
+    ['1.0.0', '🎉 首个正式版本：书签管理 / 多搜索引擎 / 链接巡检 / 访问统计 / 保险库 / 自动备份 / 多主题 / 浏览器扩展 / 双端适配'],
+    ['1.0.1', '🐛 修复：新建/编辑书签未自动解析域名，导致「域名」列空白；新增 fix-link-domain.js 一键补全历史空域名'],
+    ['1.0.2', '修复测试/正式环境切换后旧Token失效导致收藏失败的问题'],
+    ['1.0.3', '✨ 新增 3 套配色主题：极光星夜 / 奶油拿铁 / 莫兰迪灰；统计卡三块颜色互不重复且贴合主题，自定义配色面板升级'],
+    ['1.0.4', '✨ 书签批量移动分类 / Emoji 图标库扩充至约 290 个 / 置顶上限提升至 8 个'],
+  ];
+  const hasChangelogVersion = db.prepare('SELECT COUNT(*) as count FROM changelog WHERE version = ?');
+  const insertChangelog = db.prepare('INSERT INTO changelog (version, description) VALUES (?, ?)');
+  let changelogAdded = 0;
+  for (const [version, description] of baseChangelog) {
+    if (hasChangelogVersion.get(version).count === 0) {
+      insertChangelog.run(version, description);
+      changelogAdded++;
+    }
+  }
+  if (changelogAdded > 0) {
+    console.log(`[数据库] 更新记录已补充（新增 ${changelogAdded} 条）`);
   }
 }
 

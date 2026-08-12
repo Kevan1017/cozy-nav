@@ -31,6 +31,8 @@ import {
   NCheckbox,
   NPagination,
   NTooltip,
+  NModal,
+  NText,
   useDialog,
   useMessage,
 } from 'naive-ui';
@@ -101,7 +103,8 @@ const { pagination, syncItemCount, onPageSizeChange, onPageChange } = usePaginat
 
 /* ---------- 业务操作：置顶 / 删除 ---------- */
 
-const MAX_PIN_COUNT = 6;
+// 置顶数量上限：8 个（一行显示正好适配当前网页布局）
+const MAX_PIN_COUNT = 8;
 
 function getPinnedCount() {
   return dataStore.allLinks.filter(l => l.is_pinned).length;
@@ -167,6 +170,48 @@ const { checkedRowKeys, batchDeleting, askBatchDelete } = useBatchOps({
   confirmContent: (count) => `将删除选中的 ${count} 个书签，操作不可恢复。`,
   successTip: (count) => `已删除 ${count} 个书签`,
 });
+
+/* ---------- 批量移动（移动到其他分类） ---------- */
+const showMoveModal = ref(false);
+const moveTargetCat = ref(null);
+const batchMoving = ref(false);
+
+/** 打开批量移动弹窗：校验已勾选 */
+function openBatchMove() {
+  if (!checkedRowKeys.value.length) {
+    message.warning('请先勾选要移动的书签');
+    return;
+  }
+  moveTargetCat.value = null;
+  showMoveModal.value = true;
+}
+
+/** 确认批量移动：调用接口后清空勾选并刷新 */
+async function confirmBatchMove() {
+  if (!moveTargetCat.value) {
+    message.warning('请选择目标分类');
+    return;
+  }
+  batchMoving.value = true;
+  try {
+    const res = await dataStore.batchMoveLinks(checkedRowKeys.value, moveTargetCat.value);
+    message.success(res?.message || `已移动 ${checkedRowKeys.value.length} 个书签`);
+    showMoveModal.value = false;
+    checkedRowKeys.value = [];
+  } catch (e) {
+    message.warning(e.message || '批量移动失败');
+  } finally {
+    batchMoving.value = false;
+  }
+}
+
+/** 批量移动弹窗中的分类选项（排除「全部分类」占位项） */
+const moveCatOptions = computed(() =>
+  dataStore.categories.map(c => ({
+    label: `${c.emoji} ${c.name}`,
+    value: c.id,
+  }))
+);
 
 /* ---------- 链接可用性检测 ---------- */
 
@@ -600,6 +645,12 @@ watch(
         <n-space v-else align="center">
           <n-button
             v-if="!isMobileView && checkedRowKeys.length"
+            secondary
+            :loading="batchMoving"
+            @click="openBatchMove"
+          >移动到分类 ({{ checkedRowKeys.length }})</n-button>
+          <n-button
+            v-if="!isMobileView && checkedRowKeys.length"
             type="error"
             tertiary
             :loading="batchDeleting"
@@ -694,6 +745,13 @@ watch(
             checkedRowKeys = val ? mobileVisibleLinks.map(l => l.id) : [];
           }"
         >全选</n-checkbox>
+        <n-button
+          v-if="checkedRowKeys.length"
+          size="small"
+          secondary
+          :loading="batchMoving"
+          @click="openBatchMove"
+        >移动到</n-button>
         <n-button
           v-if="checkedRowKeys.length"
           size="small"
@@ -804,6 +862,36 @@ watch(
       :link="editingLink"
       :cat-options="catOptions"
     />
+
+    <!-- ============ 批量移动到分类弹窗 ============ -->
+    <n-modal
+      v-model:show="showMoveModal"
+      preset="card"
+      title="移动到分类"
+      style="width: min(420px, 90vw)"
+      :mask-closable="false"
+    >
+      <div class="move-modal">
+        <n-text depth="3">
+          已选 <b>{{ checkedRowKeys.length }}</b> 个书签，请选择要移动到的目标分类：
+        </n-text>
+        <n-select
+          v-model:value="moveTargetCat"
+          :options="moveCatOptions"
+          placeholder="选择目标分类"
+          size="large"
+          filterable
+        />
+        <div class="move-actions">
+          <n-button @click="showMoveModal = false">取消</n-button>
+          <n-button
+            type="primary"
+            :loading="batchMoving"
+            @click="confirmBatchMove"
+          >确认移动</n-button>
+        </div>
+      </div>
+    </n-modal>
   </div>
 </template>
 
@@ -905,6 +993,19 @@ watch(
   font-size: 12px;
   font-weight: 600;
   color: var(--admin-accent);
+}
+
+/* 批量移动弹窗 */
+.move-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.move-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
 }
 </style>
 

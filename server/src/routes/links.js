@@ -24,6 +24,7 @@ import {
   getIssues,
   batchCheckLinks,
   resetHealthBatch,
+  batchMoveLinks,
   getFavicon,
   fetchFaviconByUrl,
   uploadFaviconCustom,
@@ -107,6 +108,19 @@ router.put(
   [body('ids').isArray({ min: 1, max: 200 }).withMessage('ids 必须为 1-200 个书签 ID')],
   validate,
   resetHealthBatch
+);
+
+// PUT /api/links/batch-move - 批量移动书签到目标分类
+router.put(
+  '/batch-move',
+  authMiddleware,
+  [
+    body('ids').isArray({ min: 1, max: 200 }).withMessage('ids 必须为 1-200 个书签 ID'),
+    body('ids.*').isInt({ min: 1 }).withMessage('书签 ID 必须为正整数'),
+    body('category_id').isInt({ min: 1 }).withMessage('分类ID必须为正整数'),
+  ],
+  validate,
+  batchMoveLinks
 );
 
 // POST /api/links - 新建书签

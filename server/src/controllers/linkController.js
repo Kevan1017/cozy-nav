@@ -313,10 +313,10 @@ export function togglePin(req, res) {
   }
 
   if (pinned) {
-    // 置顶：限制最多 6 个
+    // 置顶：限制最多 8 个（一行显示正好适配当前网页布局）
     const pinnedCount = db.prepare('SELECT COUNT(*) as cnt FROM links WHERE is_pinned = 1 AND deleted_at IS NULL').get();
-    if (existing.is_pinned !== 1 && pinnedCount.cnt >= 6) {
-      return jsonError(res, '置顶数量不能超过 6 个');
+    if (existing.is_pinned !== 1 && pinnedCount.cnt >= 8) {
+      return jsonError(res, '置顶数量不能超过 8 个');
     }
     // 置顶
     const maxOrder = db.prepare('SELECT COALESCE(MAX(pin_order), 0) as max FROM links WHERE is_pinned = 1 AND deleted_at IS NULL').get();
@@ -715,6 +715,29 @@ export function resetHealthBatch(req, res) {
      WHERE deleted_at IS NULL AND id IN (${placeholders})`
   ).run(...ids);
   return jsonSuccess(res, { reset: changes }, `已重置 ${changes} 条链接的检测状态`);
+}
+
+/**
+ * 批量移动书签到目标分类（软删除数据不参与移动）
+ * PUT /api/links/batch-move
+ */
+export function batchMoveLinks(req, res) {
+  const { ids, category_id } = req.body;
+
+  // 校验目标分类存在（含软删除过滤），避免移动后书签挂到不存在的分类
+  const cat = db.prepare('SELECT id, name FROM categories WHERE id = ? AND deleted_at IS NULL').get(category_id);
+  if (!cat) {
+    return jsonError(res, '目标分类不存在');
+  }
+
+  const placeholders = ids.map(() => '?').join(',');
+  const { changes } = db.prepare(
+    `UPDATE links SET category_id = ?
+     WHERE deleted_at IS NULL AND id IN (${placeholders})`
+  ).run(category_id, ...ids);
+
+  console.log(`[${new Date().toISOString()}] [书签] [批量移动] [成功] ${changes} 条 → ${cat.name}`);
+  return jsonSuccess(res, { moved: changes }, `已移动 ${changes} 个书签到「${cat.name}」`);
 }
 
 /* ============================== favicon 兜底 API（原 faviconController.js 合并） ============================== */

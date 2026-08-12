@@ -99,6 +99,11 @@ export const linkApi = {
     return request.post('/links/batch-check', { ids });
   },
 
+  /** 批量移动书签到目标分类 */
+  batchMove(ids, categoryId) {
+    return request.put('/links/batch-move', { ids, category_id: categoryId });
+  },
+
   /** 批量重置链接健康状态（清空判死/失败记录） */
   batchResetHealth(ids) {
     return request.put('/links/health/reset', { ids });
