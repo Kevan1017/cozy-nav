@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node -e \"try{require('fs').rmSync('dist/.user.ini',{force:true})}catch(e){}\" && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
