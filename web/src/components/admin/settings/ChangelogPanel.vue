@@ -15,6 +15,7 @@ import {
   useMessage,
 } from 'naive-ui';
 import { changelogApi } from '../../../api/changelog.js';
+import { versionApi } from '../../../api/version.js';
 
 const message = useMessage();
 
@@ -40,9 +41,18 @@ async function loadList() {
   }
 }
 
-/** 打开新增弹窗（清空表单） */
-function openAdd() {
+/** 打开新增弹窗（版本号 + 更新说明自动带出：当前版本号与最近一次 Git 提交标题） */
+async function openAdd() {
   form.value = { version: '', description: '' };
+  try {
+    const res = await versionApi.get();
+    // 版本号：如 v1.0.1+abc1234 → 1.0.1；失败则留空手动填写
+    const display = res.data?.display || '';
+    const match = display.match(/v?(\d+\.\d+\.\d+)/);
+    form.value.version = match ? match[1] : '';
+    // 更新说明：自动带出最近一次提交标题，可修改后保存
+    form.value.description = res.data?.commitMessage || '';
+  } catch { /* 忽略，均留空由用户填写 */ }
   showModal.value = true;
 }
 
