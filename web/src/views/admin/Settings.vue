@@ -16,6 +16,7 @@ import SettingsSite from '../../components/admin/settings/SettingsSite.vue';
 import SettingsAppearance from '../../components/admin/settings/SettingsAppearance.vue';
 import SettingsSecurity from '../../components/admin/settings/SettingsSecurity.vue';
 import CollapsibleCard from '../../components/admin/settings/CollapsibleCard.vue';
+import ChangelogPanel from '../../components/admin/settings/ChangelogPanel.vue';
 import { versionApi } from '../../api/version.js';
 
 const prefsStore = usePrefsStore();
@@ -81,6 +82,9 @@ onMounted(() => {
         版本号自动跟随 Git 提交更新（如 v1.0.0+abc1234）。每次部署服务器执行
         <code>git pull</code> 后，这里会显示最新的提交哈希，方便核对线上代码版本。
       </p>
+
+      <!-- 更新记录：记录每次版本修复内容（数据存数据库 changelog 表） -->
+      <ChangelogPanel />
     </collapsible-card>
   </div>
 </template>

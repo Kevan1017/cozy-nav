@@ -43,10 +43,12 @@ export function getVersionInfo() {
   const version = readPackageVersion();
   const commit = git('rev-parse --short HEAD');
   const commitDate = git('log -1 --format=%cd --date=short');
+  const commitMessage = git('log -1 --format=%s'); // 最近一次提交标题（后台更新记录自动带出）
   cached = {
     version,                                  // 主版本号，如 1.0.0
     commit,                                   // Git 短提交哈希，如 abc1234
     commitDate,                               // 最近提交日期
+    commitMessage,                            // 最近一次提交标题
     environment: process.env.NODE_ENV || 'development', // 运行环境
     display: `v${version}${commit ? `+${commit}` : ''}`, // 展示用版本号
   };
