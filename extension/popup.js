@@ -59,16 +59,14 @@ $('btnSaveServer').addEventListener('click', async () => {
   }
   $('serverUrl').style.borderColor = '';
   await CNAV.saveServerUrl(url);
-  // 已登录则直接回收藏区，否则进入登录区
-  const token = await CNAV.getToken();
-  if (token) {
-    show('sec-save');
-    $('loggedUser').textContent = '已登录';
-    $('btnLogout').classList.remove('hidden');
-  } else {
-    show('sec-login');
-    $('username').focus();
-  }
+  // 切换服务器后，旧环境的登录 Token 在新服务器上无效（各环境 JWT_SECRET 不同），
+  // 必须清除并重新登录，否则会一直用旧 Token 请求新地址导致收藏失败
+  await CNAV.clearToken();
+  show('sec-login');
+  $('loggedUser').textContent = '';
+  $('btnLogout').classList.add('hidden');
+  $('loginTip').textContent = '已切换服务器，请使用该环境账号重新登录';
+  $('username').focus();
 });
 
 /* 设置入口：已配置用户也能回到设置区修改地址 */
