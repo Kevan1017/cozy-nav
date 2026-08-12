@@ -1,6 +1,7 @@
 <script setup>
 /**
- * 返回顶部按钮：滚动超过阈值后右下角悬浮显示，点击平滑回到顶部
+ * 返回顶部按钮：滚动超过阈值后右下角固定悬浮显示，点击平滑回到顶部
+ * 位置固定，不做动态上移；遮挡问题由页脚底部留白解决（见 Footer.vue）
  */
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 
@@ -54,7 +55,8 @@ onBeforeUnmount(() => {
 .btt {
   position: fixed;
   right: clamp(14px, 2.5vw, 24px);
-  bottom: clamp(16px, 3vw, 28px);
+  /* 底部抬高：让出页脚区域，页脚贴底显示、按钮悬浮其上方不遮挡 */
+  bottom: clamp(72px, 12vw, 96px);
   width: 46px;
   height: 46px;
   border-radius: 50%;
