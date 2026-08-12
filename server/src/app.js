@@ -11,6 +11,7 @@ import prefsRoutes from './routes/preferences.js';
 import engineRoutes from './routes/engines.js';
 import importExportRoutes from './routes/importExport.js';
 import backupRoutes from './routes/backup.js';
+import changelogRoutes from './routes/changelog.js';
 import { cleanExpiredFailedRecords, FAVICON_DIR } from './utils/faviconFetcher.js';
 import { startHealthPatrol, startDailyBackup } from './utils/scheduler.js';
 import { LOGO_DIR } from './controllers/prefsController.js';
@@ -183,6 +184,7 @@ app.use('/api/vault', vaultRouter);
 app.use('/api/favicon', faviconRouter);
 app.use('/api', importExportRoutes);
 app.use('/api/backup', backupRoutes);
+app.use('/api/changelog', changelogRoutes);
 
 // 全局 404 兜底：对 /api 路径返回统一 JSON（避免命中 Express 默认 404 HTML）
 app.use('/api', (req, res) => {

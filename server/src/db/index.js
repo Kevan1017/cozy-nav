@@ -584,6 +584,21 @@ function migrateDatabase() {
     `);
     console.log('[数据库] 健康巡检索引已就绪');
   } catch (err) { console.log('[数据库] 索引创建失败', err.message); }
+
+  // 迁移：更新记录表（后台「关于悦行」维护，记录每次版本修复内容，幂等建表 + 空表种子）
+  db.exec(`CREATE TABLE IF NOT EXISTS changelog (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    version     TEXT NOT NULL,      -- 版本号，如 1.0.1
+    description TEXT NOT NULL,      -- 本次改动说明
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  const hasChangelog = db.prepare('SELECT COUNT(*) as count FROM changelog').get();
+  if (hasChangelog.count === 0) {
+    const seedChangelog = db.prepare('INSERT INTO changelog (version, description) VALUES (?, ?)');
+    seedChangelog.run('1.0.0', '🎉 首个正式版本：书签管理 / 多搜索引擎 / 链接巡检 / 访问统计 / 保险库 / 自动备份 / 多主题 / 浏览器扩展 / 双端适配');
+    seedChangelog.run('1.0.1', '🐛 修复：新建/编辑书签未自动解析域名，导致「域名」列空白；新增 fix-link-domain.js 一键补全历史空域名');
+    console.log('[数据库] 更新记录种子已写入（v1.0.0 / v1.0.1）');
+  }
 }
 
 /**
