@@ -1029,6 +1029,23 @@ watch(
   flex: 1;
   min-width: 0;
 }
+/* 移动端筛选栏：3 个下拉等分一行换行排列 + 搜索框占满整行，避免横向溢出 */
+@media (max-width: 1023px) {
+  .filter-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .filter-cat,
+  .filter-health,
+  .filter-pin {
+    flex: 1 1 calc((100% - 16px) / 3);
+    width: auto;
+    min-width: 0;
+  }
+  .filter-search {
+    flex: 1 1 100%;
+  }
+}
 
 /* 头像 */
 .pin-cell {

@@ -53,6 +53,11 @@ const routes = [
         component: () => import('../views/admin/NotifyCenter.vue'),
       },
       {
+        path: 'logs',
+        name: 'OperationLog',
+        component: () => import('../views/admin/OperationLog.vue'),
+      },
+      {
         path: 'settings',
         name: 'Settings',
         component: () => import('../views/admin/Settings.vue'),

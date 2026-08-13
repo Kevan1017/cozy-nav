@@ -4,6 +4,7 @@
 import jwt from 'jsonwebtoken';
 import db from '../db/index.js';
 import { jsonSuccess, jsonError } from '../utils/response.js';
+import { writeLog, LOG_MODULE, LOG_ACTION } from '../utils/operationLogger.js';
 
 /**
  * 检查保险库是否已解锁（通过 X-Vault-Token 请求头）
@@ -168,6 +169,13 @@ export function createCategory(req, res) {
   const newCategory = db.prepare('SELECT * FROM categories WHERE id = ?').get(result.lastInsertRowid);
 
   console.log(`[${new Date().toISOString()}] [分类] [新增] [成功] ${name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.CATEGORY,
+    action: LOG_ACTION.CREATE,
+    detail: `新建分类：${name}`,
+    meta: { id: Number(result.lastInsertRowid) },
+  }, req);
 
   return jsonSuccess(res, newCategory, '创建成功');
 }
@@ -201,6 +209,13 @@ export function updateCategory(req, res) {
   const updated = db.prepare('SELECT * FROM categories WHERE id = ?').get(id);
 
   console.log(`[${new Date().toISOString()}] [分类] [编辑] [成功] ${name || existing.name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.CATEGORY,
+    action: LOG_ACTION.UPDATE,
+    detail: `编辑分类：${name || existing.name}`,
+    meta: { id: Number(id) },
+  }, req);
 
   return jsonSuccess(res, updated, '更新成功');
 }
@@ -227,6 +242,13 @@ export function deleteCategory(req, res) {
   const deletedLinksCount = result.changes;
 
   console.log(`[${now}] [分类] [删除] [成功] ${existing.name} (级联删除 ${deletedLinksCount} 个书签)`);
+  // 操作日志：记录级联删除的书签数量，批量异常删除可事后追溯
+  writeLog({
+    module: LOG_MODULE.CATEGORY,
+    action: LOG_ACTION.DELETE,
+    detail: `删除分类：${existing.name}（级联删除 ${deletedLinksCount} 个书签）`,
+    meta: { id: Number(id), deletedLinks: deletedLinksCount },
+  }, req);
 
   return jsonSuccess(res, { deletedLinks: deletedLinksCount }, `删除成功，已级联删除 ${deletedLinksCount} 个书签`);
 }
@@ -280,6 +302,13 @@ export function restoreCategory(req, res) {
   db.prepare('UPDATE categories SET deleted_at = NULL WHERE id = ?').run(id);
 
   console.log(`[${new Date().toISOString()}] [分类] [恢复] [成功] ${existing.name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.CATEGORY,
+    action: LOG_ACTION.RESTORE,
+    detail: `恢复分类：${existing.name}`,
+    meta: { id: Number(id) },
+  }, req);
 
   return jsonSuccess(res, null, '已恢复');
 }
@@ -305,6 +334,13 @@ export function purgeCategory(req, res) {
   db.prepare('DELETE FROM categories WHERE id = ?').run(id);
 
   console.log(`[${new Date().toISOString()}] [分类] [彻底删除] [成功] ${existing.name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.CATEGORY,
+    action: LOG_ACTION.DELETE,
+    detail: `彻底删除分类：${existing.name}`,
+    meta: { id: Number(id) },
+  }, req);
 
   return jsonSuccess(res, null, '已彻底删除');
 }

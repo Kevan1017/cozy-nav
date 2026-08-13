@@ -26,6 +26,7 @@ import { isPublicHostname, classifyHostname } from '../utils/ssrfGuard.js';
 import { checkLinkHealth } from '../utils/linkHealth.js';
 import { startHealthBatch, getHealthBatchProgress, persistHealth } from '../utils/healthRunner.js';
 import { normalizeUrl } from '../utils/urlNormalize.js';
+import { writeLog, LOG_MODULE, LOG_ACTION } from '../utils/operationLogger.js';
 
 /**
  * 记录书签访问
@@ -125,6 +126,14 @@ export async function createLink(req, res) {
 
   console.log(`[${new Date().toISOString()}] [书签] [新增] [成功] ${name}`);
 
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.CREATE,
+    detail: `新建书签：${name}`,
+    meta: { id: Number(result.lastInsertRowid), category_id, url },
+  }, req);
+
   // 未上传自定义图标时，异步抓取 favicon（不阻塞响应）
   if (!faviconPath) {
     setImmediate(() => {
@@ -196,6 +205,13 @@ export function batchCreateLinks(req, res) {
   }
 
   console.log(`[${new Date().toISOString()}] [书签] [批量新增] [成功] 新增 ${created.length} / 跳过 ${skipped.length}`);
+  // 操作日志：批量新建（带数量，异常大批量可事后追溯）
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.CREATE,
+    detail: `批量新建书签：成功 ${created.length} 个、跳过 ${skipped.length} 个`,
+    meta: { category_id, created: created.length, skipped: skipped.length },
+  }, req);
   return jsonSuccess(res, { created: created.length, skipped }, '批量创建成功');
 }
 
@@ -263,6 +279,13 @@ export function updateLink(req, res) {
   const updated = db.prepare('SELECT * FROM links WHERE id = ?').get(id);
 
   console.log(`[${new Date().toISOString()}] [书签] [编辑] [成功] ${name || existing.name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.UPDATE,
+    detail: `编辑书签：${name || existing.name}`,
+    meta: { id: Number(id), category_id: category_id ?? existing.category_id, url: finalUrl },
+  }, req);
 
   return jsonSuccess(res, updated, '更新成功');
 }
@@ -282,6 +305,13 @@ export function deleteLink(req, res) {
   db.prepare('UPDATE links SET deleted_at = ? WHERE id = ?').run(new Date().toISOString(), id);
 
   console.log(`[${new Date().toISOString()}] [书签] [删除] [成功] ${existing.name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.DELETE,
+    detail: `删除书签：${existing.name}`,
+    meta: { id: Number(id), category_id: existing.category_id, url: existing.url },
+  }, req);
 
   return jsonSuccess(res, null, '删除成功');
 }
@@ -339,6 +369,13 @@ export function restoreLink(req, res) {
   db.prepare('UPDATE links SET deleted_at = NULL WHERE id = ?').run(id);
 
   console.log(`[${new Date().toISOString()}] [书签] [恢复] [成功] ${existing.name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.RESTORE,
+    detail: `恢复书签：${existing.name}`,
+    meta: { id: Number(id), category_id: existing.category_id },
+  }, req);
 
   return jsonSuccess(res, null, '已恢复');
 }
@@ -360,6 +397,13 @@ export function purgeLink(req, res) {
   db.prepare('DELETE FROM links WHERE id = ?').run(id);
 
   console.log(`[${new Date().toISOString()}] [书签] [彻底删除] [成功] ${existing.name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.DELETE,
+    detail: `彻底删除书签：${existing.name}`,
+    meta: { id: Number(id), category_id: existing.category_id },
+  }, req);
 
   return jsonSuccess(res, null, '已彻底删除');
 }

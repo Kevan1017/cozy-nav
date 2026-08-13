@@ -1,6 +1,6 @@
 <script setup>
 /**
- * 书签管理 - 新建/编辑弹窗表单（从 LinkManage.vue 拆出）
+ * 书签管理 - 新建/编辑表单（从 LinkManage.vue 拆出）
  * - URL / 名称 / 分类 / 备注 / 域名 / 头像文字 / 头像颜色 / 排序权重
  * - 手动获取 favicon / 网页标题
  * - URL 变化自动解析标题 + 图标（防抖，不覆盖用户输入）
@@ -109,35 +109,6 @@ const rules = {
   ],
 };
 
-/* 打开弹窗时按模式初始化表单（create → 空表单；edit → 回填行数据） */
-watch(
-  () => props.show,
-  (val) => {
-    if (!val) return;
-    if (props.mode === 'edit' && props.link) {
-      form.value = {
-        id: props.link.id,
-        category_id: props.link.category_id,
-        name: props.link.name,
-        url: props.link.url,
-        domain: props.link.domain || '',
-        avatar_text: props.link.avatar_text || '',
-        avatar_color: props.link.avatar_color || 'peach',
-        sort_order: props.link.sort_order ?? null,
-        note: props.link.note || '',
-        is_favorite: !!props.link.is_favorite,
-      };
-      formFaviconPath.value = props.link.favicon_path || '';
-      faviconDataUrl.value = '';
-    } else {
-      form.value = emptyForm();
-      formFaviconPath.value = '';
-      faviconDataUrl.value = '';
-    }
-    nextTick(() => formRef.value?.restoreValidation());
-  }
-);
-
 function randomAvatarColor() { form.value.avatar_color = pickRandom(BG_COLORS); }
 
 /* ---------- 手动获取 favicon / 标题 ---------- */
@@ -149,6 +120,37 @@ const formFaviconPath = ref('');
 const faviconDataUrl = ref('');
 /** 隐藏的文件选择框 */
 const faviconFileInput = ref(null);
+
+/* 打开时按模式初始化表单（create → 空表单；edit → 回填行数据）
+ * 注意：必须声明在 formFaviconPath / faviconDataUrl 之后，否则 immediate 回调触发 TDZ 错误 */
+watch(
+  () => [props.show, props.mode, props.link],
+  ([show, mode, link]) => {
+    if (!show) return;
+    if (mode === 'edit' && link) {
+      form.value = {
+        id: link.id,
+        category_id: link.category_id,
+        name: link.name,
+        url: link.url,
+        domain: link.domain || '',
+        avatar_text: link.avatar_text || '',
+        avatar_color: link.avatar_color || 'peach',
+        sort_order: link.sort_order ?? null,
+        note: link.note || '',
+        is_favorite: !!link.is_favorite,
+      };
+      formFaviconPath.value = link.favicon_path || '';
+      faviconDataUrl.value = '';
+    } else {
+      form.value = emptyForm();
+      formFaviconPath.value = '';
+      faviconDataUrl.value = '';
+    }
+    nextTick(() => formRef.value?.restoreValidation());
+  },
+  { immediate: true }
+);
 
 /** 触发隐藏文件选择框 */
 function triggerFaviconUpload() {
@@ -450,6 +452,7 @@ onBeforeUnmount(() => clearTimeout(autoParseTimer));
 </script>
 
 <template>
+  <!-- ====== 新建/编辑弹窗 ====== -->
   <n-modal
     v-model:show="modalShow"
     :mask-closable="true"

@@ -1,6 +1,7 @@
 import db from '../db/index.js';
 import { jsonSuccess, jsonError } from '../utils/response.js';
 import { normalizeUrl } from '../utils/urlNormalize.js';
+import { writeLog, LOG_MODULE, LOG_ACTION } from '../utils/operationLogger.js';
 
 /**
  * 导出 JSON 格式数据
@@ -229,6 +230,17 @@ export function importJSON(req, res) {
     }
 
     db.exec('COMMIT');
+    // 操作日志：记录导入结果（含数量，异常大批量导入可事后追溯）
+    writeLog({
+      module: LOG_MODULE.IMPORT,
+      action: LOG_ACTION.IMPORT,
+      detail: `导入书签（JSON）：新建 ${stats.linksCreated} 个链接、更新 ${stats.linksUpdated} 个、跳过 ${stats.linksSkipped} 个、新建 ${stats.categoriesCreated} 个分类（策略：${strategy}）`,
+      meta: {
+        format: 'json', strategy,
+        categoriesCreated: stats.categoriesCreated, categoriesReused: stats.categoriesReused,
+        linksCreated: stats.linksCreated, linksUpdated: stats.linksUpdated, linksSkipped: stats.linksSkipped,
+      },
+    }, req);
     jsonSuccess(res, stats, `导入成功：新建 ${stats.categoriesCreated} 个分类，新增 ${stats.linksCreated} 个链接，更新 ${stats.linksUpdated} 个，跳过 ${stats.linksSkipped} 个`);
   } catch (e) {
     db.exec('ROLLBACK');
@@ -336,6 +348,17 @@ export function importBookmarks(req, res) {
     }
 
     db.exec('COMMIT');
+    // 操作日志：记录导入结果（含数量，异常大批量导入可事后追溯）
+    writeLog({
+      module: LOG_MODULE.IMPORT,
+      action: LOG_ACTION.IMPORT,
+      detail: `导入书签（HTML）：新建 ${stats.linksCreated} 个链接、更新 ${stats.linksUpdated} 个、跳过 ${stats.linksSkipped} 个、新建 ${stats.categoriesCreated} 个分类（策略：${strategy}）`,
+      meta: {
+        format: 'html', strategy,
+        categoriesCreated: stats.categoriesCreated, categoriesReused: stats.categoriesReused,
+        linksCreated: stats.linksCreated, linksUpdated: stats.linksUpdated, linksSkipped: stats.linksSkipped,
+      },
+    }, req);
     jsonSuccess(res, stats, `导入成功：新建 ${stats.categoriesCreated} 个分类，新增 ${stats.linksCreated} 个链接，更新 ${stats.linksUpdated} 个，跳过 ${stats.linksSkipped} 个`);
   } catch (e) {
     db.exec('ROLLBACK');

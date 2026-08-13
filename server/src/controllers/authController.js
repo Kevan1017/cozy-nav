@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import db from '../db/index.js';
 import { jsonSuccess, jsonError } from '../utils/response.js';
+import { writeLog, LOG_MODULE, LOG_ACTION } from '../utils/operationLogger.js';
 
 /**
  * 管理员登录
@@ -47,6 +48,13 @@ export async function login(req, res) {
   );
 
   console.log(`[${new Date().toISOString()}] [认证] [登录] [成功] ${username}`);
+  // 操作日志（登录前未认证，operator 留空，仅记来源 IP）
+  writeLog({
+    module: LOG_MODULE.AUTH,
+    action: LOG_ACTION.LOGIN,
+    detail: `管理员登录成功：${username}`,
+    meta: { username },
+  }, req);
 
   return jsonSuccess(res, { token, username: admin.username }, '登录成功');
 }
@@ -90,6 +98,13 @@ export async function changePassword(req, res) {
     .run(hashedPassword, now, adminId);
 
   console.log(`[${now}] [认证] [修改密码] [成功] ${admin.username}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.AUTH,
+    action: LOG_ACTION.UPDATE,
+    detail: '修改登录密码',
+    meta: {},
+  }, req);
 
   return jsonSuccess(res, null, '密码修改成功，请重新登录');
 }
@@ -141,6 +156,13 @@ export function toggleVault(req, res) {
 
   const now = new Date().toISOString();
   console.log(`[${now}] [保险库] [开关] [成功] ${req.admin.username} -> ${enabled ? '开启' : '关闭'}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.VAULT,
+    action: LOG_ACTION.TOGGLE,
+    detail: `保险库${enabled ? '开启' : '关闭'}`,
+    meta: { enabled: !!newValue },
+  }, req);
 
   return jsonSuccess(res, { enabled: !!newValue }, enabled ? '保险库已开启' : '保险库已关闭');
 }
@@ -183,6 +205,13 @@ export async function setVaultPassword(req, res) {
 
   const now = new Date().toISOString();
   console.log(`[${now}] [保险库] [设置密码] [成功] ${req.admin.username}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.VAULT,
+    action: LOG_ACTION.UPDATE,
+    detail: '设置保险库密码',
+    meta: {},
+  }, req);
 
   return jsonSuccess(res, null, '保险库密码设置成功');
 }
@@ -231,6 +260,13 @@ export async function changeVaultPassword(req, res) {
 
   const now = new Date().toISOString();
   console.log(`[${now}] [保险库] [修改密码] [成功] ${req.admin.username}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.VAULT,
+    action: LOG_ACTION.UPDATE,
+    detail: '修改保险库密码',
+    meta: {},
+  }, req);
 
   return jsonSuccess(res, null, '保险库密码修改成功');
 }
@@ -351,6 +387,13 @@ export async function resetVaultPassword(req, res) {
 
   const now = new Date().toISOString();
   console.log(`[${now}] [保险库] [重置密码] [成功] ${req.admin.username}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.VAULT,
+    action: LOG_ACTION.UPDATE,
+    detail: '重置保险库密码',
+    meta: {},
+  }, req);
 
   return jsonSuccess(res, null, '保险库密码已重置，请重新设置保险库');
 }
