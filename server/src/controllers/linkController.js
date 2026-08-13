@@ -72,7 +72,7 @@ function extractDomain(url) {
  * POST /api/links
  */
 export async function createLink(req, res) {
-  const { category_id, name, url, domain, avatar_text, avatar_color, sort_order, note, force, favicon_data_url } = req.body;
+  const { category_id, name, url, domain, avatar_text, avatar_color, sort_order, note, force, favicon_data_url, is_favorite } = req.body;
 
   // 校验分类是否存在
   const category = db.prepare('SELECT id FROM categories WHERE id = ? AND deleted_at IS NULL').get(category_id);
@@ -117,9 +117,9 @@ export async function createLink(req, res) {
   }
 
   const result = db.prepare(`
-    INSERT INTO links (category_id, name, url, domain, avatar_text, avatar_color, sort_order, note, url_normalized, favicon_path, favicon_status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(category_id, name, url, domain || extractDomain(url), avatar_text || null, avatar_color || null, nextSort, note || '', normalized, faviconPath, faviconPath ? 'ok' : null);
+    INSERT INTO links (category_id, name, url, domain, avatar_text, avatar_color, sort_order, note, url_normalized, favicon_path, favicon_status, is_favorite)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(category_id, name, url, domain || extractDomain(url), avatar_text || null, avatar_color || null, nextSort, note || '', normalized, faviconPath, faviconPath ? 'ok' : null, is_favorite ? 1 : 0);
 
   const newLink = db.prepare('SELECT * FROM links WHERE id = ?').get(result.lastInsertRowid);
 
@@ -205,7 +205,7 @@ export function batchCreateLinks(req, res) {
  */
 export function updateLink(req, res) {
   const { id } = req.params;
-  const { category_id, name, url, domain, avatar_text, avatar_color, sort_order, note, force, favicon_path } = req.body;
+  const { category_id, name, url, domain, avatar_text, avatar_color, sort_order, note, force, favicon_path, is_favorite } = req.body;
 
   const existing = db.prepare('SELECT * FROM links WHERE id = ? AND deleted_at IS NULL').get(id);
   if (!existing) {
@@ -230,7 +230,7 @@ export function updateLink(req, res) {
 
   db.prepare(`
     UPDATE links
-    SET category_id = ?, name = ?, url = ?, domain = ?, avatar_text = ?, avatar_color = ?, sort_order = ?, note = ?, url_normalized = ?
+    SET category_id = ?, name = ?, url = ?, domain = ?, avatar_text = ?, avatar_color = ?, sort_order = ?, note = ?, url_normalized = ?, is_favorite = ?
     WHERE id = ?
   `).run(
     category_id ?? existing.category_id,
@@ -242,6 +242,7 @@ export function updateLink(req, res) {
     sort_order ?? existing.sort_order,
     note !== undefined ? note : existing.note,
     normalized,
+    is_favorite !== undefined ? (is_favorite ? 1 : 0) : existing.is_favorite,
     id
   );
 
@@ -396,6 +397,30 @@ export function togglePin(req, res) {
   console.log(`[${new Date().toISOString()}] [书签] [置顶] [成功] ${existing.name} -> ${pinned ? '置顶' : '取消'}`);
 
   return jsonSuccess(res, updated, pinned ? '置顶成功' : '取消置顶成功');
+}
+
+/**
+ * 标记/取消标记常用书签
+ * PUT /api/links/:id/favorite
+ * 独立于置顶：常用标记与置顶互不影响（关闭置顶板块不会自动取消常用标记）
+ */
+export function toggleFavorite(req, res) {
+  const { id } = req.params;
+  const { favorite } = req.body;
+
+  const existing = db.prepare('SELECT * FROM links WHERE id = ? AND deleted_at IS NULL').get(id);
+  if (!existing) {
+    return jsonError(res, '书签不存在');
+  }
+
+  const newFavorite = favorite ? 1 : 0;
+  db.prepare('UPDATE links SET is_favorite = ? WHERE id = ?').run(newFavorite, id);
+
+  const updated = db.prepare('SELECT * FROM links WHERE id = ?').get(id);
+
+  console.log(`[${new Date().toISOString()}] [书签] [常用标记] [成功] ${existing.name} -> ${favorite ? '标记常用' : '取消常用'}`);
+
+  return jsonSuccess(res, updated, favorite ? '已标记为常用' : '已取消常用标记');
 }
 
 /**

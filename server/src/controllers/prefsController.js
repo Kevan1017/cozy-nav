@@ -19,7 +19,7 @@ const LOGO_MAX_SIZE = 300 * 1024;
 
 /** 读取偏好时可选的列 */
 const PREFS_COLUMNS =
-  'theme, search_engine, engine_display_count, theme_preset, show_domain, no_image, view_mode, view_layout_enabled, sort_enabled, font_family, font_switch_enabled, hero_tagline, festival_enabled, festival_countdown_enabled, idle_mark_enabled, custom_theme, site_title, site_logo, site_keywords, site_description, site_copyright, stat_tagline, health_config, notification_config, category_sort_mode, link_sort_mode';
+  'theme, search_engine, engine_display_count, theme_preset, show_domain, no_image, view_mode, view_layout_enabled, sort_enabled, font_family, font_switch_enabled, hero_tagline, festival_enabled, festival_countdown_enabled, idle_mark_enabled, pin_strip_enabled, favorite_mark_enabled, custom_theme, site_title, site_logo, site_keywords, site_description, site_copyright, stat_tagline, health_config, notification_config, category_sort_mode, link_sort_mode';
 
 /** 巡检配置默认值（与 preferences.health_config 结构保持一致） */
 const DEFAULT_HEALTH_CONFIG = {
@@ -146,7 +146,7 @@ export function updatePreferences(req, res) {
   const {
     theme, search_engine, engine_display_count, theme_preset, show_domain, no_image, view_mode, view_layout_enabled,
     sort_enabled, font_family, font_switch_enabled, hero_tagline, festival_enabled, festival_countdown_enabled,
-    idle_mark_enabled, custom_theme, site_title, site_logo, site_keywords, site_description, site_copyright,
+    idle_mark_enabled, pin_strip_enabled, favorite_mark_enabled, custom_theme, site_title, site_logo, site_keywords, site_description, site_copyright,
     stat_tagline, health_config, notification_config, category_sort_mode, link_sort_mode,
   } = req.body;
 
@@ -158,7 +158,7 @@ export function updatePreferences(req, res) {
   db.prepare(
     `UPDATE preferences SET theme = ?, search_engine = ?, engine_display_count = ?, theme_preset = ?,
      show_domain = ?, no_image = ?, view_mode = ?, view_layout_enabled = ?, sort_enabled = ?, font_family = ?, font_switch_enabled = ?, hero_tagline = ?,
-     festival_enabled = ?, festival_countdown_enabled = ?, idle_mark_enabled = ?, custom_theme = ?,
+     festival_enabled = ?, festival_countdown_enabled = ?, idle_mark_enabled = ?, pin_strip_enabled = ?, favorite_mark_enabled = ?, custom_theme = ?,
      site_title = ?, site_logo = ?, site_keywords = ?, site_description = ?, site_copyright = ?,
      stat_tagline = ?, health_config = ?, notification_config = ?, category_sort_mode = ?, link_sort_mode = ?
      WHERE id = 1`
@@ -178,6 +178,8 @@ export function updatePreferences(req, res) {
     festival_enabled ?? existing.festival_enabled,
     festival_countdown_enabled ?? existing.festival_countdown_enabled,
     idle_mark_enabled ?? existing.idle_mark_enabled,
+    pin_strip_enabled ?? existing.pin_strip_enabled,
+    favorite_mark_enabled ?? existing.favorite_mark_enabled,
     custom_theme !== undefined ? JSON.stringify(custom_theme) : existing.custom_theme,
     site_title ?? existing.site_title,
     site_logo ?? existing.site_logo,
@@ -208,6 +210,8 @@ export function updatePreferences(req, res) {
     `festival=${festival_enabled ?? existing.festival_enabled} ` +
     `festivalCountdown=${festival_countdown_enabled ?? existing.festival_countdown_enabled} ` +
     `idleMark=${idle_mark_enabled ?? existing.idle_mark_enabled} ` +
+    `pinStrip=${pin_strip_enabled ?? existing.pin_strip_enabled} ` +
+    `favoriteMark=${favorite_mark_enabled ?? existing.favorite_mark_enabled} ` +
     `customTheme=${custom_theme !== undefined ? 'updated' : 'kept'} ` +
     `siteTitle=${site_title ?? 'kept'} ` +
     `siteLogo=${site_logo !== undefined ? 'updated' : 'kept'} ` +

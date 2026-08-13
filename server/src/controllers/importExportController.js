@@ -39,6 +39,7 @@ export function exportJSON(req, res) {
           avatar_color: link.avatar_color,
           is_pinned: link.is_pinned,
           pin_order: link.pin_order,
+          is_favorite: link.is_favorite,
           sort_order: link.sort_order,
         })),
       });
@@ -194,20 +195,21 @@ export function importJSON(req, res) {
 
           if (existingLink && strategy === 'overwrite') {
             db.prepare(
-              'UPDATE links SET name = ?, domain = ?, avatar_text = ?, avatar_color = ? WHERE id = ?'
+              'UPDATE links SET name = ?, domain = ?, avatar_text = ?, avatar_color = ?, is_favorite = ? WHERE id = ?'
             ).run(
               link.name,
               extractDomain(link.url),
               link.avatar_text || link.name[0],
               link.avatar_color || 'slate',
+              link.is_favorite ? 1 : 0,
               existingLink.id
             );
             stats.linksUpdated++;
           } else {
             // 新增链接（未显式传排序权重时自动排到该分类末尾）
             db.prepare(
-              `INSERT INTO links (category_id, name, url, domain, avatar_text, avatar_color, is_pinned, sort_order, url_normalized)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              `INSERT INTO links (category_id, name, url, domain, avatar_text, avatar_color, is_pinned, is_favorite, sort_order, url_normalized)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             ).run(
               catId,
               link.name,
@@ -216,6 +218,7 @@ export function importJSON(req, res) {
               link.avatar_text || link.name[0],
               link.avatar_color || 'slate',
               link.is_pinned || 0,
+              link.is_favorite ? 1 : 0,
               link.sort_order ?? db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM links WHERE category_id = ? AND deleted_at IS NULL').get(catId).next,
               normalized
             );

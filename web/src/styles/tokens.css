@@ -64,6 +64,7 @@
   --card: rgba(255, 253, 248, .78);
   --card-solid: #FFFDF8;
   --link-bg: #F5EDE0;
+  --link-fav: #E8A33C;
   --shadow: rgba(42, 36, 24, .14);
 
   /* 分割线 / 边框 */
@@ -166,6 +167,7 @@ body:has(#dm:checked) {
   --card-solid: #2A2018;
   --card-solid2: #342A20;
   --link-bg: rgba(255, 253, 248, .08);
+  --link-fav: #F2B34C;
   --shadow: rgba(0, 0, 0, .50);
 
   /* 分割线 / 光晕 — 提高可见度 */

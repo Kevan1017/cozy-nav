@@ -74,8 +74,8 @@ export function getCategories(req, res) {
   // 管理员接口返回完整字段（后台表格展示 favicon 状态/访问量/健康状态）
   // 前台公开接口仅返回渲染所需字段，600+ 链接时显著减少 payload
   const linkFields = isAdmin
-    ? 'id, category_id, name, url, domain, avatar_text, avatar_color, is_pinned, pin_order, sort_order, is_locked, favicon_path, favicon_status, last_visited, visit_count, health_status, last_check_at, health_note, created_at'
-    : 'id, category_id, name, url, domain, avatar_text, avatar_color, is_pinned, pin_order, sort_order, is_locked, favicon_path, last_visited, created_at';
+    ? 'id, category_id, name, url, domain, avatar_text, avatar_color, is_pinned, pin_order, sort_order, is_locked, is_favorite, favicon_path, favicon_status, last_visited, visit_count, health_status, last_check_at, health_note, created_at'
+    : 'id, category_id, name, url, domain, avatar_text, avatar_color, is_pinned, pin_order, sort_order, is_locked, is_favorite, favicon_path, last_visited, created_at';
 
   const links = db.prepare(`
     SELECT ${linkFields}

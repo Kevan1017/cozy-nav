@@ -618,6 +618,24 @@ function migrateDatabase() {
   if (changelogAdded > 0) {
     console.log(`[数据库] 更新记录已补充（新增 ${changelogAdded} 条）`);
   }
+
+  // 迁移：links 表补 is_favorite 列（⭐ 常用标记，独立于 is_pinned，前台星标角标用）
+  try {
+    db.exec('ALTER TABLE links ADD COLUMN is_favorite INTEGER DEFAULT 0');
+    console.log('[数据库] links 表已添加 is_favorite 列');
+  } catch { /* 列已存在则忽略 */ }
+
+  // 迁移：preferences 表补 pin_strip_enabled 列（置顶板块显示开关，1=显示 0=隐藏）
+  try {
+    db.exec('ALTER TABLE preferences ADD COLUMN pin_strip_enabled INTEGER DEFAULT 1');
+    console.log('[数据库] preferences 表已添加 pin_strip_enabled 列');
+  } catch { /* 列已存在则忽略 */ }
+
+  // 迁移：preferences 表补 favorite_mark_enabled 列（常用星标显示开关，1=显示 0=隐藏）
+  try {
+    db.exec('ALTER TABLE preferences ADD COLUMN favorite_mark_enabled INTEGER DEFAULT 1');
+    console.log('[数据库] preferences 表已添加 favorite_mark_enabled 列');
+  } catch { /* 列已存在则忽略 */ }
 }
 
 /**

@@ -15,6 +15,7 @@ import {
   NInputNumber,
   NSelect,
   NButton,
+  NCheckbox,
   useMessage,
   useDialog,
 } from 'naive-ui';
@@ -72,6 +73,7 @@ function emptyForm() {
     avatar_color: 'peach',
     sort_order: 0,
     note: '',
+    is_favorite: false,
   };
 }
 const form = ref(emptyForm());
@@ -123,6 +125,7 @@ watch(
         avatar_color: props.link.avatar_color || 'peach',
         sort_order: props.link.sort_order ?? null,
         note: props.link.note || '',
+        is_favorite: !!props.link.is_favorite,
       };
       formFaviconPath.value = props.link.favicon_path || '';
       faviconDataUrl.value = '';
@@ -359,6 +362,7 @@ async function saveLink() {
       avatar_color: f.avatar_color,
       sort_order: f.sort_order ?? null,
       note: f.note?.trim() || '',
+      is_favorite: !!f.is_favorite,
       // 弹窗内新获取到的图标写回（URL 未变时后端不会自动重抓，需显式提交）
       favicon_path: formFaviconPath.value || undefined,
       // 创建模式下上传的自定义图标（data URL），后端保存为文件并写入 favicon_path
@@ -588,6 +592,10 @@ onBeforeUnmount(() => clearTimeout(autoParseTimer));
           placeholder="留空自动排末尾"
           style="width: 100%"
         />
+      </n-form-item>
+
+      <n-form-item label="常用标记">
+        <n-checkbox v-model:checked="form.is_favorite">标记为常用书签（前台右上角显示金色星标）</n-checkbox>
       </n-form-item>
     </n-form>
 

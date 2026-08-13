@@ -44,6 +44,11 @@ export const linkApi = {
     return request.put(`/links/${id}/pin`, { pinned, order });
   },
 
+  /** 标记/取消标记常用书签 */
+  toggleFavorite(id, favorite) {
+    return request.put(`/links/${id}/favorite`, { favorite });
+  },
+
   /** 切换书签锁定状态 */
   toggleLock(id, locked) {
     return request.put(`/links/${id}/lock`, { locked });
