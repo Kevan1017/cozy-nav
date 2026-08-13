@@ -606,6 +606,7 @@ function migrateDatabase() {
     ['1.0.3', '✨ 新增 3 套配色主题：极光星夜 / 奶油拿铁 / 莫兰迪灰；统计卡三块颜色互不重复且贴合主题，自定义配色面板升级'],
     ['1.0.4', '✨ 书签批量移动分类 / Emoji 图标库扩充至约 290 个 / 置顶上限提升至 8 个'],
     ['1.1.0', '✨ 新增操作日志（登录/增删改/导入导出/密码等关键操作留痕，模块筛选+关键字检索，保留最近 5000 条）；置顶板块开关与常用书签星标；移动端筛选栏优化'],
+    ['1.1.1', '✨ 新建/编辑书签弹窗布局优化：按「基本信息 / 外观 / 高级」三区分组，图标获取/上传/移除按钮归位到预览区，头像文字与颜色合并，备注/排序权重/常用标记折叠收纳'],
   ];
   const hasChangelogVersion = db.prepare('SELECT COUNT(*) as count FROM changelog WHERE version = ?');
   const insertChangelog = db.prepare('INSERT INTO changelog (version, description) VALUES (?, ?)');

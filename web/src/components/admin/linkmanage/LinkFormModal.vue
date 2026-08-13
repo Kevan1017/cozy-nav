@@ -16,6 +16,8 @@ import {
   NSelect,
   NButton,
   NCheckbox,
+  NCollapse,
+  NCollapseItem,
   useMessage,
   useDialog,
 } from 'naive-ui';
@@ -458,7 +460,7 @@ onBeforeUnmount(() => clearTimeout(autoParseTimer));
     :mask-closable="true"
     preset="card"
     :title="modalMode === 'create' ? '新建书签' : '编辑书签'"
-    style="width: clamp(320px, 92vw, 540px);"
+    style="width: clamp(320px, 92vw, 600px);"
     :segmented="{ content: true, action: true }"
     :bordered="false"
     class="link-modal"
@@ -471,24 +473,47 @@ onBeforeUnmount(() => clearTimeout(autoParseTimer));
       label-align="left"
       size="medium"
     >
+      <!-- ===== 基本信息 ===== -->
+      <div class="section-title">基本信息</div>
       <n-form-item label="URL" path="url">
         <div class="url-wrap">
-          <div class="url-field">
-            <n-input v-model:value="form.url" placeholder="https://github.com" clearable />
+          <n-input v-model:value="form.url" placeholder="https://github.com" clearable />
+          <p v-if="normalizedPreview" class="url-preview">
+            判重指纹：<code>{{ normalizedPreview }}</code>（保存时按此判定是否重复）
+          </p>
+        </div>
+      </n-form-item>
+
+      <!-- ===== 外观 ===== -->
+      <div class="section-title">外观</div>
+      <div class="appearance-box">
+        <!-- 行1：图标预览 + 头像文字 + 图标操作按钮（窄屏自动换行） -->
+        <div class="appearance-main">
+          <div v-if="formFaviconPath || faviconDataUrl" class="favicon-preview">
+            <img
+              :src="formFaviconPath ? `/favicons/${formFaviconPath}` : faviconDataUrl"
+              class="fav-preview-img"
+              alt=""
+            >
+            <span class="fav-preview-text">已获取</span>
+          </div>
+          <n-form-item label="头像文字（留空自动取首字母）" path="avatar_text" class="avatar-item">
+            <n-input
+              v-model:value="form.avatar_text"
+              placeholder="G"
+              maxlength="2"
+            />
+          </n-form-item>
+          <div class="favicon-actions">
+            <n-button size="small" quaternary :loading="faviconFetching" :disabled="!form.url" @click="handleFetchFavicon">获取图标</n-button>
+            <n-button size="small" quaternary :loading="faviconUploading" @click="triggerFaviconUpload">上传图标</n-button>
             <n-button
-              size="medium"
+              v-if="formFaviconPath || faviconDataUrl"
+              size="small"
               quaternary
-              :loading="faviconFetching"
-              :disabled="!form.url"
-              @click="handleFetchFavicon"
-            >获取图标</n-button>
-            <!-- 上传图标：触发隐藏文件选择框，canvas 压缩 64x64 后上传 -->
-            <n-button
-              size="medium"
-              quaternary
-              :loading="faviconUploading"
-              @click="triggerFaviconUpload"
-            >上传图标</n-button>
+              type="error"
+              @click="handleRemoveFavicon"
+            >移除</n-button>
             <input
               ref="faviconFileInput"
               type="file"
@@ -497,23 +522,36 @@ onBeforeUnmount(() => clearTimeout(autoParseTimer));
               @change="handleFaviconFileChange"
             >
           </div>
-          <p v-if="normalizedPreview" class="url-preview">
-            判重指纹：<code>{{ normalizedPreview }}</code>（保存时按此判定是否重复）
-          </p>
         </div>
-      </n-form-item>
-
-      <n-form-item v-if="formFaviconPath || faviconDataUrl" label="图标预览">
-        <div class="favicon-preview">
-          <img
-            :src="formFaviconPath ? `/favicons/${formFaviconPath}` : faviconDataUrl"
-            class="fav-preview-img"
-            alt=""
-          >
-          <span class="fav-preview-text">已获取</span>
-          <n-button size="small" quaternary type="error" @click="handleRemoveFavicon">移除</n-button>
-        </div>
-      </n-form-item>
+        <!-- 行2：头像颜色 -->
+        <n-form-item label="头像颜色" path="avatar_color">
+          <div class="color-field">
+            <div class="color-row">
+              <button
+                v-for="c in BG_COLORS"
+                :key="c"
+                type="button"
+                class="color-dot"
+                :class="{ on: form.avatar_color === c }"
+                :style="{ background: `var(--${c})` }"
+                :title="c"
+                @click="form.avatar_color = c"
+              />
+            </div>
+            <div class="hex-row">
+              <span class="color-preview" :style="{ background: resolveColor(form.avatar_color) }" />
+              <n-input
+                :value="displayHex(form.avatar_color)"
+                placeholder="或输入 HEX 值，如 #FF5500"
+                size="small"
+                class="hex-input"
+                @update:value="form.avatar_color = $event"
+              />
+              <n-button size="small" quaternary @click="randomAvatarColor">🎲 随机</n-button>
+            </div>
+          </div>
+        </n-form-item>
+      </div>
 
       <n-form-item label="名称" path="name">
         <div class="url-field">
@@ -528,78 +566,49 @@ onBeforeUnmount(() => clearTimeout(autoParseTimer));
         </div>
       </n-form-item>
 
-      <n-form-item label="分类" path="category_id">
-        <n-select
-          v-model:value="form.category_id"
-          :options="catOptions.filter(o => o.value !== 0)"
-          placeholder="请选择分类"
-        />
-      </n-form-item>
+      <!-- 分类 + 域名 并排一行（分类稍窄） -->
+      <div class="field-pair">
+        <n-form-item label="分类" path="category_id" class="pair-cat">
+          <n-select
+            v-model:value="form.category_id"
+            :options="catOptions.filter(o => o.value !== 0)"
+            placeholder="请选择分类"
+          />
+        </n-form-item>
+        <n-form-item label="域名（留空自动提取）" path="domain" class="pair-domain">
+          <n-input v-model:value="form.domain" placeholder="github.com" clearable />
+        </n-form-item>
+      </div>
 
-      <n-form-item label="备注（仅管理员可见）" path="note">
-        <n-input
-          v-model:value="form.note"
-          type="textarea"
-          :autosize="{ minRows: 2, maxRows: 4 }"
-          placeholder="为什么收藏？怎么用？（仅自己在后台可见）"
-          maxlength="200"
-          show-count
-        />
-      </n-form-item>
-
-      <n-form-item label="域名（留空自动提取）" path="domain">
-        <n-input v-model:value="form.domain" placeholder="github.com" clearable />
-      </n-form-item>
-
-      <n-form-item label="头像文字（留空自动取首字母）" path="avatar_text">
-        <n-input
-          v-model:value="form.avatar_text"
-          placeholder="G"
-          maxlength="2"
-          style="max-width: 180px;"
-        />
-      </n-form-item>
-
-      <n-form-item label="头像颜色" path="avatar_color">
-        <div class="color-field">
-          <div class="color-row">
-            <button
-              v-for="c in BG_COLORS"
-              :key="c"
-              type="button"
-              class="color-dot"
-              :class="{ on: form.avatar_color === c }"
-              :style="{ background: `var(--${c})` }"
-              :title="c"
-              @click="form.avatar_color = c"
-            />
-          </div>
-          <div class="hex-row">
-            <span class="color-preview" :style="{ background: resolveColor(form.avatar_color) }" />
+      <!-- ===== 高级（默认折叠） ===== -->
+      <div class="section-title">高级</div>
+      <n-collapse>
+        <n-collapse-item title="备注 / 排序权重 / 常用标记" name="advanced">
+          <n-form-item label="备注（仅管理员可见）" path="note">
             <n-input
-              :value="displayHex(form.avatar_color)"
-              placeholder="或输入 HEX 值，如 #FF5500"
-              size="small"
-              class="hex-input"
-              @update:value="form.avatar_color = $event"
+              v-model:value="form.note"
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 4 }"
+              placeholder="为什么收藏？怎么用？（仅自己在后台可见）"
+              maxlength="200"
+              show-count
             />
-            <n-button size="small" quaternary @click="randomAvatarColor">🎲 随机</n-button>
-          </div>
-        </div>
-      </n-form-item>
+          </n-form-item>
 
-      <n-form-item label="排序权重" path="sort_order">
-        <n-input-number
-          v-model:value="form.sort_order"
-          :min="0"
-          placeholder="留空自动排末尾"
-          style="width: 100%"
-        />
-      </n-form-item>
+          <n-form-item label="排序权重" path="sort_order">
+            <n-input-number
+              v-model:value="form.sort_order"
+              :min="0"
+              placeholder="留空自动排末尾"
+              style="width: 100%"
+            />
+          </n-form-item>
 
-      <n-form-item label="常用标记">
-        <n-checkbox v-model:checked="form.is_favorite">标记为常用书签（前台右上角显示金色星标）</n-checkbox>
-      </n-form-item>
+          <n-form-item label="常用标记">
+            <n-checkbox v-model:checked="form.is_favorite">标记为常用书签（前台右上角显示金色星标）</n-checkbox>
+          </n-form-item>
+        </n-collapse-item>
+      </n-collapse>
     </n-form>
 
     <template #footer>
@@ -686,6 +695,53 @@ onBeforeUnmount(() => clearTimeout(autoParseTimer));
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* 分类 + 域名 并排一行（分类稍窄，窄屏自动换行） */
+.field-pair {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pair-cat { flex: 2 1 130px; }
+.pair-domain { flex: 3 1 190px; }
+
+/* 分区标题（基本信息 / 外观 / 高级）：小字加粗 + 右侧细分隔线 */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--admin-muted);
+  margin: 16px 0 4px;
+}
+.section-title:first-child { margin-top: 0; }
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--admin-divider, rgba(128, 128, 128, .18));
+}
+
+/* 外观区：行1（预览/头像文字/按钮）窄屏自动换行，行2 颜色 */
+.appearance-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.appearance-main {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.avatar-item { flex: 1 1 150px; }
+.avatar-item .n-input { width: 100%; }
+.favicon-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 /* URL 输入区容器：块级占满整行，预览在输入框下方另起一行 */
