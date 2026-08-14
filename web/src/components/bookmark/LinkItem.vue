@@ -3,8 +3,8 @@
  * 书签条目：头像 + 名称 + 域名
  * 支持加密状态：锁定时显示锁图标，点击触发解锁
  * 头像优先显示 favicon，加载失败回退字母头像
- * 闲置标记：开启开关且超过 30 天未访问时，右上角显示时钟角标，悬停提示天数
- * 常用标记：开关开启且链接标记为常用时，名称末尾内联金色小星（所有视图模式统一）
+ * 闲置标记：开启开关且超过 30 天未访问时，名称右侧内联红色时钟，悬停提示天数
+ * 常用标记：开关开启且链接标记为常用时，整个书签条目左侧显示金色竖条（所有视图模式统一）
  */
 import { computed } from 'vue';
 import FaviconImage from '../ui/FaviconImage.vue';
@@ -37,7 +37,7 @@ const showIdle = computed(() =>
 /** 角标悬浮提示文本 */
 const idleTip = computed(() => `已 ${idleDays.value} 天未打开`);
 
-/** 是否显示常用星标：开关开启 + 链接标记为常用 */
+/** 是否显示常用竖条：开关开启 + 链接标记为常用 */
 const showFav = computed(() => prefsStore.favoriteMarkEnabled && !!props.link.is_favorite);
 
 /** 点击打开：先异步埋点记录访问，再打开链接 */
@@ -61,20 +61,8 @@ function handleOpen() {
 
   <!-- 正常书签 -->
   <div v-else class="lk" :title="showIdle ? idleTip : undefined" @click="handleOpen">
-    <span v-if="showIdle" class="idle-clock" :title="idleTip">
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <polyline points="12 6 12 12 16 14" />
-      </svg>
-    </span>
+    <!-- 常用竖条：整个书签条目左侧金色竖条（不占布局宽度、不遮挡文本） -->
+    <span v-if="showFav" class="fav-bar" title="常用书签"></span>
     <!-- 有 favicon：用 FaviconImage（含加载失败回退字母头像） -->
     <FaviconImage
       v-if="link.favicon_path && !prefsStore.noImage"
@@ -100,13 +88,19 @@ function handleOpen() {
     <div class="txt">
       <div class="nm">
         <span class="nm-text">{{ link.name }}</span>
-        <span v-if="showFav" class="fav-star" title="常用书签">
+        <!-- 闲置时钟：名称右侧内联（与常用竖条分居条目两端，互不遮挡） -->
+        <span v-if="showIdle" class="idle-mark" :title="idleTip">
           <svg
             viewBox="0 0 24 24"
-            fill="currentColor"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
             aria-hidden="true"
           >
-            <path d="M12 2l2.9 6.6 7.1.7-5.4 4.8 1.6 7-6.2-3.6-6.2 3.6 1.6-7L2 9.3l7.1-.7z" />
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
           </svg>
         </span>
       </div>
@@ -187,18 +181,16 @@ function handleOpen() {
   text-overflow: ellipsis;
 }
 
-/* 常用书签星标：名称末尾内联小星（文本流内占位，不遮挡任何文字） */
-.fav-star {
-  flex: none;
-  display: inline-flex;
-  width: 13px;
-  height: 13px;
-  color: var(--link-fav);
-}
-
-.fav-star svg {
-  width: 100%;
-  height: 100%;
+/* 常用竖条：卡片左侧竖向金色条（绝对定位不占宽度，与闲置时钟分居两端） */
+.fav-bar {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 22px;
+  border-radius: 2px;
+  background: var(--link-fav);
 }
 
 .dm {
@@ -215,27 +207,18 @@ function handleOpen() {
   text-overflow: ellipsis;
 }
 
-/* 闲置时钟角标：右上角小钟表图标（警示红），悬浮提示天数 */
-.idle-clock {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 2;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* 闲置时钟：名称右侧内联小钟表图标（警示红），悬浮提示天数 */
+.idle-mark {
+  flex: none;
+  display: inline-flex;
+  width: 13px;
+  height: 13px;
   color: var(--link-idle, var(--rose));
-  background: color-mix(in oklab, var(--link-idle, var(--rose)) 16%, transparent);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
-  pointer-events: none;
 }
 
-.idle-clock svg {
-  width: 12px;
-  height: 12px;
+.idle-mark svg {
+  width: 100%;
+  height: 100%;
 }
 
 /* 头像基础样式（字母头像与 FaviconImage 的 .favicon-img 视觉一致） */

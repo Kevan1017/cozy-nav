@@ -18,6 +18,19 @@ import {
   NIcon,
   useDialog,
 } from 'naive-ui';
+import {
+  LayoutDashboard,
+  FolderTree,
+  Bookmark,
+  Search,
+  Database,
+  Stethoscope,
+  Bell,
+  ScrollText,
+  Palette,
+  Settings as SettingsIcon,
+  LogOut,
+} from '@lucide/vue';
 import { useAuthStore } from '../../stores/auth.js';
 import { useResponsive } from '../../composables/useResponsive.js';
 
@@ -34,72 +47,63 @@ function goHome() {
   window.open('/', '_blank');
 }
 
-/* ---------- 菜单项（复用：PC 侧边栏 + 移动端抽屉） ---------- */
+/* ---------- 菜单项（分组复用：PC 侧边栏 + 移动端抽屉） ---------- */
 const menuOptions = computed(() => [
   {
-    label: '页面概览',
-    key: '/admin',
-    icon: renderIcon(() => h('span', { style: 'font-size:16px' }, '📊')),
+    type: 'group',
+    label: '内容管理',
+    key: 'g-content',
+    children: [
+      { label: '页面概览', key: '/admin', icon: renderIcon(LayoutDashboard) },
+      { label: '分类管理', key: '/admin/categories', icon: renderIcon(FolderTree) },
+      { label: '书签管理', key: '/admin/links', icon: renderIcon(Bookmark) },
+      { label: '搜索引擎', key: '/admin/engines', icon: renderIcon(Search) },
+    ],
   },
   {
-    label: '分类管理',
-    key: '/admin/categories',
-    icon: renderIcon(() => h('span', { style: 'font-size:16px' }, '🗂️')),
+    type: 'group',
+    label: '数据维护',
+    key: 'g-data',
+    children: [
+      { label: '数据管理', key: '/admin/data', icon: renderIcon(Database) },
+      { label: '链接巡检', key: '/admin/health', icon: renderIcon(Stethoscope) },
+    ],
   },
   {
-    label: '书签管理',
-    key: '/admin/links',
-    icon: renderIcon(() => h('span', { style: 'font-size:16px' }, '🔖')),
+    type: 'group',
+    label: '通知日志',
+    key: 'g-log',
+    children: [
+      { label: '通知中心', key: '/admin/notify', icon: renderIcon(Bell) },
+      { label: '操作日志', key: '/admin/logs', icon: renderIcon(ScrollText) },
+    ],
   },
   {
-    label: '搜索引擎',
-    key: '/admin/engines',
-    icon: renderIcon(() => h('span', { style: 'font-size:16px' }, '🔎')),
-  },
-  {
-    label: '数据管理',
-    key: '/admin/data',
-    icon: renderIcon(() => h('span', { style: 'font-size:16px' }, '📦')),
-  },
-  {
-    label: '链接巡检',
-    key: '/admin/health',
-    icon: renderIcon(() => h('span', { style: 'font-size:16px' }, '🩺')),
-  },
-  {
-    label: '通知中心',
-    key: '/admin/notify',
-    icon: renderIcon(() => h('span', { style: 'font-size:16px' }, '🔔')),
-  },
-  {
-    label: '操作日志',
-    key: '/admin/logs',
-    icon: renderIcon(() => h('span', { style: 'font-size:16px' }, '📋')),
-  },
-  {
-    label: '网站设置',
-    key: '/admin/settings',
-    icon: renderIcon(() => h('span', { style: 'font-size:16px' }, '⚙️')),
-  },
-  {
-    label: '退出登录',
-    key: '__logout__',
-    icon: renderIcon(() => h('span', { style: 'font-size:16px' }, '🚪')),
+    type: 'group',
+    label: '设置',
+    key: 'g-settings',
+    children: [
+      { label: '外观设置', key: '/admin/appearance', icon: renderIcon(Palette) },
+      { label: '网站设置', key: '/admin/settings', icon: renderIcon(SettingsIcon) },
+    ],
   },
 ]);
 
-function renderIcon(render) {
-  return () => h(NIcon, null, { default: render });
+/** 包装 Lucide 图标为 n-menu 可用的渲染函数 */
+function renderIcon(icon) {
+  return () => h(NIcon, null, { default: () => h(icon) });
 }
 
 /* ---------- 当前激活的菜单 key（与 route.path 对齐） ---------- */
 const activeKey = computed(() => {
+  /** 扁平化所有叶子菜单项（跳过分组项） */
+  const leaves = menuOptions.value.flatMap((opt) => opt.children || [opt]);
   // 先精确匹配，确保子路由不会错误命中父级菜单
-  for (const opt of menuOptions.value) {
+  for (const opt of leaves) {
     if (route.path === opt.key) return opt.key;
   }
   // 再前缀匹配，用于子路径（如 /admin/links/create）
-  for (const opt of menuOptions.value) {
+  for (const opt of leaves) {
     if (route.path.startsWith(opt.key + '/')) return opt.key;
   }
   return '/admin';
@@ -114,10 +118,6 @@ function openDrawer() {
 
 /** n-menu 菜单点击统一入口（PC 侧边栏 + 移动端抽屉共用） */
 function handleMenuKey(key) {
-  if (key === '__logout__') {
-    confirmLogout();
-    return;
-  }
   drawerOpen.value = false;
   router.push(key);
 }
@@ -172,12 +172,25 @@ function confirmLogout() {
           <span>前往首页</span>
           <span class="go-home-arrow">↗</span>
         </a>
-        <n-menu
-          :options="menuOptions"
-          :value="activeKey"
-          :indent="20"
-          @update:value="handleMenuKey"
-        />
+        <div class="menu-wrap">
+          <n-menu
+            :options="menuOptions"
+            :value="activeKey"
+            :indent="20"
+            @update:value="handleMenuKey"
+          />
+        </div>
+        <n-button
+          class="logout-btn"
+          quaternary
+          block
+          @click="confirmLogout"
+        >
+          <template #icon>
+            <n-icon :size="16"><LogOut /></n-icon>
+          </template>
+          退出登录
+        </n-button>
       </div>
     </n-layout-sider>
 
@@ -343,9 +356,33 @@ body:has(#dm:checked) .mobile-title {
   background: transparent !important;
 }
 
-/* 退出登录菜单项：红色文字区分 */
-:deep(.n-menu .n-menu-item:last-child .n-menu-item-content-header) {
-  color: #e74c3c;
+/* 菜单滚动区：占据侧边栏剩余空间，超出时内部滚动 */
+.menu-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* 菜单分组标题：小号弱化，与菜单项拉开层级 */
+:deep(.n-menu .n-menu-item-group-title) {
+  font-size: 12px;
+  color: var(--admin-muted);
+  opacity: .8;
+}
+
+/* 侧边栏底部退出登录按钮 */
+.logout-btn {
+  flex: none;
+  color: #e74c3c !important;
+  border-radius: 12px;
+  border: 1px solid var(--admin-border);
+  background: var(--admin-card);
+  transition: .2s ease;
+}
+.logout-btn:hover {
+  border-color: #e74c3c;
+  background: var(--admin-card-solid);
 }
 
 /* 前往首页按钮 */

@@ -51,7 +51,7 @@ export const usePrefsStore = defineStore('prefs', () => {
   const idleMarkEnabled = ref(localStorage.getItem('idleMarkEnabled') === '1');
   /** 前台置顶板块是否显示（默认开启，与后端 pin_strip_enabled 默认 1 一致） */
   const pinStripEnabled = ref(localStorage.getItem('pinStripEnabled') !== '0');
-  /** 前台常用书签星标是否显示（默认开启，与后端 favorite_mark_enabled 默认 1 一致） */
+  /** 前台常用书签竖条是否显示（默认开启，与后端 favorite_mark_enabled 默认 1 一致） */
   const favoriteMarkEnabled = ref(localStorage.getItem('favoriteMarkEnabled') !== '0');
   /** 统计卡底部标语（可在后台编辑，默认英文手写体） */
   const statTagline = ref(localStorage.getItem('statTagline') || '— everything in its place —');
