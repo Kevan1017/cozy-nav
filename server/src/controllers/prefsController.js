@@ -4,6 +4,7 @@
 import db from '../db/index.js';
 import { jsonSuccess, jsonError } from '../utils/response.js';
 import { sendServerChan, sendEmail, DEFAULT_NOTIFICATION_CONFIG } from '../utils/notifier.js';
+import { writeLog, LOG_MODULE, LOG_ACTION } from '../utils/operationLogger.js';
 import { writeFile, mkdir, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -19,7 +20,7 @@ const LOGO_MAX_SIZE = 300 * 1024;
 
 /** 读取偏好时可选的列 */
 const PREFS_COLUMNS =
-  'theme, search_engine, engine_display_count, theme_preset, show_domain, view_mode, view_layout_enabled, sort_enabled, font_family, font_switch_enabled, hero_tagline, festival_enabled, festival_countdown_enabled, idle_mark_enabled, custom_theme, site_title, site_logo, site_keywords, site_description, site_copyright, stat_tagline, health_config, notification_config, category_sort_mode, link_sort_mode';
+  'theme, search_engine, engine_display_count, theme_preset, show_domain, no_image, view_mode, view_layout_enabled, sort_enabled, font_family, font_switch_enabled, hero_tagline, festival_enabled, festival_countdown_enabled, idle_mark_enabled, pin_strip_enabled, favorite_mark_enabled, custom_theme, site_title, site_logo, site_keywords, site_description, site_copyright, stat_tagline, health_config, notification_config, category_sort_mode, link_sort_mode';
 
 /** 巡检配置默认值（与 preferences.health_config 结构保持一致） */
 const DEFAULT_HEALTH_CONFIG = {
@@ -84,7 +85,7 @@ function parseNotificationConfig(raw) {
       },
       events: {
         patrol: { ...DEFAULT_NOTIFICATION_CONFIG.events.patrol, ...(parsed.events?.patrol || {}) },
-        gitBackup: { ...DEFAULT_NOTIFICATION_CONFIG.events.gitBackup, ...(parsed.events?.gitBackup || {}) },
+        backup: { ...DEFAULT_NOTIFICATION_CONFIG.events.backup, ...(parsed.events?.backup || {}) },
       },
     };
   }
@@ -144,9 +145,9 @@ export function getNotifyConfig(req, res) {
  */
 export function updatePreferences(req, res) {
   const {
-    theme, search_engine, engine_display_count, theme_preset, show_domain, view_mode, view_layout_enabled,
+    theme, search_engine, engine_display_count, theme_preset, show_domain, no_image, view_mode, view_layout_enabled,
     sort_enabled, font_family, font_switch_enabled, hero_tagline, festival_enabled, festival_countdown_enabled,
-    idle_mark_enabled, custom_theme, site_title, site_logo, site_keywords, site_description, site_copyright,
+    idle_mark_enabled, pin_strip_enabled, favorite_mark_enabled, custom_theme, site_title, site_logo, site_keywords, site_description, site_copyright,
     stat_tagline, health_config, notification_config, category_sort_mode, link_sort_mode,
   } = req.body;
 
@@ -157,8 +158,8 @@ export function updatePreferences(req, res) {
 
   db.prepare(
     `UPDATE preferences SET theme = ?, search_engine = ?, engine_display_count = ?, theme_preset = ?,
-     show_domain = ?, view_mode = ?, view_layout_enabled = ?, sort_enabled = ?, font_family = ?, font_switch_enabled = ?, hero_tagline = ?,
-     festival_enabled = ?, festival_countdown_enabled = ?, idle_mark_enabled = ?, custom_theme = ?,
+     show_domain = ?, no_image = ?, view_mode = ?, view_layout_enabled = ?, sort_enabled = ?, font_family = ?, font_switch_enabled = ?, hero_tagline = ?,
+     festival_enabled = ?, festival_countdown_enabled = ?, idle_mark_enabled = ?, pin_strip_enabled = ?, favorite_mark_enabled = ?, custom_theme = ?,
      site_title = ?, site_logo = ?, site_keywords = ?, site_description = ?, site_copyright = ?,
      stat_tagline = ?, health_config = ?, notification_config = ?, category_sort_mode = ?, link_sort_mode = ?
      WHERE id = 1`
@@ -168,6 +169,7 @@ export function updatePreferences(req, res) {
     engine_display_count ?? existing.engine_display_count,
     theme_preset ?? existing.theme_preset,
     show_domain ?? existing.show_domain,
+    no_image ?? existing.no_image,
     view_mode ?? existing.view_mode,
     view_layout_enabled ?? existing.view_layout_enabled,
     sort_enabled ?? existing.sort_enabled,
@@ -177,6 +179,8 @@ export function updatePreferences(req, res) {
     festival_enabled ?? existing.festival_enabled,
     festival_countdown_enabled ?? existing.festival_countdown_enabled,
     idle_mark_enabled ?? existing.idle_mark_enabled,
+    pin_strip_enabled ?? existing.pin_strip_enabled,
+    favorite_mark_enabled ?? existing.favorite_mark_enabled,
     custom_theme !== undefined ? JSON.stringify(custom_theme) : existing.custom_theme,
     site_title ?? existing.site_title,
     site_logo ?? existing.site_logo,
@@ -199,6 +203,7 @@ export function updatePreferences(req, res) {
     `displayCount=${engine_display_count || existing.engine_display_count} ` +
     `preset=${theme_preset || existing.theme_preset} ` +
     `showDomain=${show_domain ?? existing.show_domain} ` +
+    `noImage=${no_image ?? existing.no_image} ` +
     `viewMode=${view_mode || existing.view_mode} ` +
     `viewLayoutEnabled=${view_layout_enabled ?? existing.view_layout_enabled} ` +
     `sortEnabled=${sort_enabled ?? existing.sort_enabled} ` +
@@ -206,6 +211,8 @@ export function updatePreferences(req, res) {
     `festival=${festival_enabled ?? existing.festival_enabled} ` +
     `festivalCountdown=${festival_countdown_enabled ?? existing.festival_countdown_enabled} ` +
     `idleMark=${idle_mark_enabled ?? existing.idle_mark_enabled} ` +
+    `pinStrip=${pin_strip_enabled ?? existing.pin_strip_enabled} ` +
+    `favoriteMark=${favorite_mark_enabled ?? existing.favorite_mark_enabled} ` +
     `customTheme=${custom_theme !== undefined ? 'updated' : 'kept'} ` +
     `siteTitle=${site_title ?? 'kept'} ` +
     `siteLogo=${site_logo !== undefined ? 'updated' : 'kept'} ` +
@@ -218,6 +225,27 @@ export function updatePreferences(req, res) {
     `categorySortMode=${category_sort_mode ?? 'kept'} ` +
     `linkSortMode=${link_sort_mode ?? 'kept'}`
   );
+  // 操作日志：设置保存留痕（列出实际变更的配置项，便于排查误改）
+  const changedKeys = [
+    theme !== undefined ? 'theme' : null,
+    no_image !== undefined ? 'no_image' : null,
+    view_mode !== undefined ? 'view_mode' : null,
+    font_family !== undefined ? 'font_family' : null,
+    hero_tagline !== undefined ? 'hero_tagline' : null,
+    custom_theme !== undefined ? 'custom_theme' : null,
+    site_title !== undefined ? 'site_title' : null,
+    site_logo !== undefined ? 'site_logo' : null,
+    pin_strip_enabled !== undefined ? 'pin_strip_enabled' : null,
+    favorite_mark_enabled !== undefined ? 'favorite_mark_enabled' : null,
+    health_config !== undefined ? 'health_config' : null,
+    notification_config !== undefined ? 'notification_config' : null,
+  ].filter(Boolean);
+  writeLog({
+    module: LOG_MODULE.SETTING,
+    action: LOG_ACTION.UPDATE,
+    detail: `保存后台设置：${changedKeys.join('、') || '无字段变化'}`,
+    meta: { changed: changedKeys },
+  }, req);
 
   return jsonSuccess(res, {
     ...updated,
@@ -266,6 +294,13 @@ export async function testNotify(req, res) {
       title: 'cozy·nav 通知测试',
       desp: '如果你收到这条消息，说明 Server酱通知配置正常 ✅',
     });
+    // 操作日志：通知测试发送留痕（排查误发/失败）
+    writeLog({
+      module: LOG_MODULE.SETTING,
+      action: LOG_ACTION.SEND,
+      detail: ok ? '通知测试发送成功（Server酱）' : '通知测试发送失败（Server酱）',
+      meta: { channel: 'serverchan', ok: !!ok },
+    }, req);
     return ok
       ? jsonSuccess(res, null, '测试消息已发送，请查看微信')
       : jsonError(res, '发送失败，请检查 SendKey 是否正确');
@@ -281,6 +316,13 @@ export async function testNotify(req, res) {
       title: 'cozy·nav 通知测试',
       desp: '如果你收到这封邮件，说明 QQ 邮箱通知配置正常 ✅',
     });
+    // 操作日志：通知测试发送留痕
+    writeLog({
+      module: LOG_MODULE.SETTING,
+      action: LOG_ACTION.SEND,
+      detail: ok ? '通知测试发送成功（邮箱）' : '通知测试发送失败（邮箱）',
+      meta: { channel: 'email', ok: !!ok },
+    }, req);
     return ok
       ? jsonSuccess(res, null, '测试邮件已发送，请查收邮箱')
       : jsonError(res, '发送失败，请检查邮箱配置（尤其授权码与 SMTP 端口）');
@@ -335,6 +377,13 @@ export async function uploadLogo(req, res) {
   db.prepare('UPDATE preferences SET site_logo = ? WHERE id = 1').run(siteLogo);
 
   console.log(`[${new Date().toISOString()}] [偏好] [上传Logo] [成功] ${buffer.length} bytes`);
+  // 操作日志：Logo 变更留痕
+  writeLog({
+    module: LOG_MODULE.SETTING,
+    action: LOG_ACTION.UPDATE,
+    detail: `上传站点 Logo（${(buffer.length / 1024).toFixed(1)}KB）`,
+    meta: { action: 'upload_logo', size: buffer.length },
+  }, req);
   return jsonSuccess(res, { site_logo: siteLogo }, 'Logo 上传成功');
 }
 
@@ -349,5 +398,12 @@ export function removeLogo(req, res) {
     unlink(filePath).catch(() => { /* 忽略删除失败 */ });
   }
   console.log(`[${new Date().toISOString()}] [偏好] [移除Logo] [成功]`);
+  // 操作日志：Logo 移除留痕
+  writeLog({
+    module: LOG_MODULE.SETTING,
+    action: LOG_ACTION.UPDATE,
+    detail: '移除站点 Logo',
+    meta: { action: 'remove_logo' },
+  }, req);
   return jsonSuccess(res, { site_logo: '' }, '已移除 Logo');
 }

@@ -36,6 +36,9 @@ const showIdle = computed(() =>
 /** 角标悬浮提示文本 */
 const idleTip = computed(() => `已 ${idleDays.value} 天未打开`);
 
+/** 是否显示常用星标：开关开启 + 链接标记为常用 */
+const showFav = computed(() => prefsStore.favoriteMarkEnabled && !!props.link.is_favorite);
+
 /** 点击打开：先异步埋点记录访问，再打开链接 */
 function handleOpen() {
   if (props.link.id) {
@@ -48,7 +51,7 @@ function handleOpen() {
 <template>
   <!-- 加密链接占位（未解锁时显示） -->
   <div v-if="link.is_locked && !unlocked" class="lk lk-locked" @click="emit('unlock')">
-    <div class="av av-locked">🔒</div>
+    <div v-if="!prefsStore.noImage" class="av av-locked">🔒</div>
     <div class="txt">
       <div class="nm nm-locked">已加密</div>
       <div class="dm">点击解锁查看</div>
@@ -57,6 +60,15 @@ function handleOpen() {
 
   <!-- 正常书签 -->
   <div v-else class="lk" :title="showIdle ? idleTip : undefined" @click="handleOpen">
+    <span v-if="showFav" class="fav-star" title="常用书签">
+      <svg
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        aria-hidden="true"
+      >
+        <path d="M12 2l2.9 6.6 7.1.7-5.4 4.8 1.6 7-6.2-3.6-6.2 3.6 1.6-7L2 9.3l7.1-.7z" />
+      </svg>
+    </span>
     <span v-if="showIdle" class="idle-clock" :title="idleTip">
       <svg
         viewBox="0 0 24 24"
@@ -73,7 +85,7 @@ function handleOpen() {
     </span>
     <!-- 有 favicon：用 FaviconImage（含加载失败回退字母头像） -->
     <FaviconImage
-      v-if="link.favicon_path"
+      v-if="link.favicon_path && !prefsStore.noImage"
       :url="link.url"
       :domain="link.domain"
       :favicon-path="link.favicon_path"
@@ -84,7 +96,7 @@ function handleOpen() {
     />
     <!-- 无 favicon：直接内联字母头像（免去组件实例，600+ 链接时显著减负） -->
     <div
-      v-else
+      v-else-if="!prefsStore.noImage"
       class="av"
       :style="{
         width: '32px',
@@ -198,6 +210,34 @@ function handleOpen() {
 .idle-clock svg {
   width: 12px;
   height: 12px;
+}
+
+/* 常用书签星标角标：右上角金色实心星，与闲置时钟同显时时钟右移避免重叠 */
+.fav-star {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--link-fav);
+  background: color-mix(in oklab, var(--link-fav) 18%, transparent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+  pointer-events: none;
+}
+
+.fav-star svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* 星标与闲置时钟同时显示时，闲置时钟右移一档 */
+.lk:has(.fav-star) .idle-clock {
+  right: 30px;
 }
 
 /* 头像基础样式（字母头像与 FaviconImage 的 .favicon-img 视觉一致） */

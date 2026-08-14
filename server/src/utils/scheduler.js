@@ -8,11 +8,12 @@
  */
 import db from '../db/index.js';
 import { startHealthBatch, isBatchRunning } from './healthRunner.js';
-import { runLocalBackup, getBackupConfig } from './backup.js';
-import { pushToGit, isGitRepoReady } from './gitBackup.js';
-import { notifyGitBackup } from './notifier.js';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+  runLocalBackup, getBackupConfig,
+  computeDataHash, getLastBackupHash, saveBackupHash,
+} from './backup.js';
+import { notifyBackup } from './notifier.js';
+import { uploadBackupToWebDAV } from './webdavBackup.js';
 
 /** 巡检配置默认值（与 preferences.health_config 结构保持一致） */
 const DEFAULT_HEALTH_CONFIG = {
@@ -78,8 +79,7 @@ export function startHealthPatrol() {
 
   const scheduleNext = () => {
     const cfg = getHealthConfig();
-    // 间隔下限 10 分钟，防止误配导致频繁出站
-    const intervalMs = Math.max(10 * 60 * 1000, (cfg.intervalHours || 6) * 3600 * 1000);
+    const intervalMs = (cfg.intervalHours || 6) * 3600 * 1000;
     patrolTimer = setTimeout(async () => {
       await runPatrolOnce();
       scheduleNext(); // 动态读取最新配置
@@ -110,7 +110,7 @@ export async function triggerHealthPatrol() {
   return { started: true };
 }
 
-/* ================= 每日自动备份（#84 本地 + #85 Git 异地） ================= */
+/* ================= 每日自动备份（本地快照，增量跳过） ================= */
 
 /** 备份任务防重入标志 */
 let backupRunning = false;
@@ -118,40 +118,56 @@ let backupRunning = false;
 let backupTimer = null;
 
 /**
- * 执行一次备份流程：本地备份成功且启用 Git 时，自动推送到远程仓库并通知结果
+ * 执行一次备份流程：
+ * 1. 先算数据指纹，与上次备份时一致 → 数据无变化，跳过（不生成快照、不通知）
+ * 2. 有变化 → 生成本地快照 → 记录新指纹
+ * 3. 若启用坚果云 WebDAV → 上传快照到云端（失败不影响本地） → 通知备份结果
  */
-async function runBackupOnce() {
-  if (backupRunning) return;
+async function runBackupOnce({ force = false } = {}) {
+  if (backupRunning) return { skipped: true, reason: '备份任务进行中' };
   const cfg = getBackupConfig();
-  if (!cfg.autoEnabled) return;
+  // force=true 为手动立即备份：忽略自动备份开关，但仍遵循增量跳过
+  if (!cfg.autoEnabled && !force) return { skipped: true, reason: '自动备份未启用' };
 
   backupRunning = true;
   try {
-    const result = runLocalBackup();
-
-    // Git 异地备份：本地快照成功后推送，失败不影响主流程；结果推送到通知中心
-    if (result.ok && cfg.gitEnabled) {
-      const git = await pushToGit({ remote: cfg.gitRemote, branch: cfg.gitBranch });
-      if (git.pushed) {
-        try {
-          // 备份目录写入推送标记，供「最近备份记录」显示推送状态
-          writeFileSync(join(result.dir, '.git-pushed'), String(Date.now()));
-        } catch { /* 标记写入失败忽略 */ }
-      } else if (!isGitRepoReady()) {
-        console.log(`[${new Date().toISOString()}] [备份] [Git] [提示] data 目录未初始化 git 仓库，请在 server/data 下执行 git init`);
-      }
-      console.log(`[${new Date().toISOString()}] [备份] [Git] [${git.pushed ? '成功' : '失败'}] ${git.reason || ''}`);
-      // 通知：Git 推送结果（成功/失败）
-      notifyGitBackup({
-        ok: git.pushed,
-        file: result.file,
-        size: formatBackupSize(result.size),
-        reason: git.reason || '',
-      });
-    } else if (!result.ok && cfg.gitEnabled) {
-      // 本地备份失败（如磁盘满），同样通知管理员
-      notifyGitBackup({ ok: false, file: '', size: '', reason: result.reason || '本地备份失败' });
+    // 增量判断：数据指纹一致直接跳过
+    const hash = computeDataHash();
+    if (hash && hash === getLastBackupHash()) {
+      console.log(`[${new Date().toISOString()}] [备份] [跳过] 数据无变化，跳过备份`);
+      return { skipped: true, reason: '数据无变化，跳过备份' };
     }
+
+    const result = runLocalBackup();
+    if (result.ok && hash) {
+      saveBackupHash(hash); // 记住本次指纹，供下次增量比对
+    }
+
+    // WebDAV 云端备份：本地成功且启用时上传快照（失败只记日志，不影响本地结果）
+    // - 仅上传数据库 + Logo，跳过 favicons（可再生缓存，量大省流量）
+    // - 云端按独立 retainCount 保留份数（默认 3 份），超出删除最旧
+    let webdav = null;
+    if (result.ok && cfg.webdav?.enabled) {
+      webdav = await uploadBackupToWebDAV({
+        dir: result.dir,
+        snap: result.file,
+        config: cfg.webdav,
+        retainCount: cfg.webdav.retainCount ?? 3,
+        excludeDirs: ['favicons'],
+      });
+    }
+
+    // 通知备份结果（成功/失败 + 云端上传状态），不影响主流程
+    notifyBackup({
+      ok: result.ok,
+      file: result.file || '',
+      size: formatBackupSize(result.size),
+      reason: result.error || '',
+      webdav,
+    });
+
+    if (!result.ok) return { ok: false, reason: result.error || '备份失败' };
+    return { ok: true, file: result.file, size: result.size, webdav };
   } finally {
     backupRunning = false;
   }
@@ -183,7 +199,7 @@ export function startDailyBackup() {
   };
 
   scheduleNext();
-  console.log(`[${new Date().toISOString()}] [备份] [启动] 每天 03:00 自动备份已开启（本地快照 + Git 异地）`);
+  console.log(`[${new Date().toISOString()}] [备份] [启动] 每天 03:00 自动备份已开启（数据无变化自动跳过）`);
 }
 
 /** 停止每日自动备份（关闭服务/测试时使用） */
@@ -192,4 +208,9 @@ export function stopDailyBackup() {
     clearTimeout(backupTimer);
     backupTimer = null;
   }
+}
+
+/** 立即触发一次备份（设置页「立即备份」按钮调用，force 忽略自动备份开关，增量判断同样生效） */
+export async function triggerBackupNow() {
+  return runBackupOnce({ force: true });
 }

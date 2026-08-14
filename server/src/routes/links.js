@@ -8,12 +8,14 @@ import { authMiddleware } from '../middlewares/auth.js';
 import { createRateLimiter } from '../middlewares/rateLimit.js';
 import {
   createLink,
+  batchCreateLinks,
   updateLink,
   deleteLink,
   getTrashLinks,
   restoreLink,
   purgeLink,
   togglePin,
+  toggleFavorite,
   toggleLinkLock,
   fetchFaviconSync,
   fetchPageTitle,
@@ -123,6 +125,24 @@ router.put(
   batchMoveLinks
 );
 
+// POST /api/links/batch - 批量新建书签（多行粘贴，URL 命中重复时跳过该条）
+router.post(
+  '/batch',
+  authMiddleware,
+  [
+    body('category_id').isInt({ min: 1 }).withMessage('分类ID必须为正整数'),
+    body('items').isArray({ min: 1, max: 100 }).withMessage('items 必须为 1-100 条书签'),
+    body('items.*.name').optional().isString().withMessage('书签名称必须为字符串'),
+    body('items.*.url')
+      .notEmpty()
+      .withMessage('URL不能为空')
+      .isURL({ protocols: ['http', 'https'], require_protocol: true })
+      .withMessage('URL 必须以 http:// 或 https:// 开头'),
+  ],
+  validate,
+  batchCreateLinks
+);
+
 // POST /api/links - 新建书签
 router.post(
   '/',
@@ -138,6 +158,8 @@ router.post(
     body('note').optional().isString().isLength({ max: 200 }).withMessage('备注不能超过200字'),
     // force：重复链接检测命中时，前端确认后传 true 强制保存
     body('force').optional().isBoolean().withMessage('force必须为布尔值'),
+    // is_favorite：是否标记为常用书签
+    body('is_favorite').optional().isBoolean().withMessage('is_favorite必须为布尔值'),
   ],
   validate,
   createLink
@@ -164,6 +186,8 @@ router.put(
     body('note').optional().isString().isLength({ max: 200 }).withMessage('备注不能超过200字'),
     // force：重复链接检测命中时，前端确认后传 true 强制保存
     body('force').optional().isBoolean().withMessage('force必须为布尔值'),
+    // is_favorite：是否标记为常用书签
+    body('is_favorite').optional().isBoolean().withMessage('is_favorite必须为布尔值'),
   ],
   validate,
   updateLink
@@ -209,6 +233,18 @@ router.put(
   ],
   validate,
   togglePin
+);
+
+// PUT /api/links/:id/favorite - 标记/取消标记常用书签（独立于置顶）
+router.put(
+  '/:id/favorite',
+  authMiddleware,
+  [
+    param('id').isInt({ min: 1 }).withMessage('书签 ID 非法'),
+    body('favorite').isBoolean().withMessage('favorite必须为布尔值'),
+  ],
+  validate,
+  toggleFavorite
 );
 
 // PUT /api/links/:id/lock - 切换书签锁定状态

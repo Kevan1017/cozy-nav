@@ -105,9 +105,9 @@ onMounted(async () => {
       @confirm="confirm"
     />
 
-    <!-- 置顶书签：数据加载期间不渲染（留白），数据到位后 bob 淡入显示 -->
+    <!-- 置顶书签：数据加载期间不渲染（留白），数据到位后 bob 淡入显示；后台关闭置顶板块开关时不渲染 -->
     <PinStrip
-      v-if="!dataStore.isLoading"
+      v-if="!dataStore.isLoading && prefsStore.pinStripEnabled"
       :links="dataStore.pinnedLinks"
       @open="openLink"
     />

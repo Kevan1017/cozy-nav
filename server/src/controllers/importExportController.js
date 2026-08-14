@@ -1,6 +1,7 @@
 import db from '../db/index.js';
 import { jsonSuccess, jsonError } from '../utils/response.js';
 import { normalizeUrl } from '../utils/urlNormalize.js';
+import { writeLog, LOG_MODULE, LOG_ACTION } from '../utils/operationLogger.js';
 
 /**
  * 导出 JSON 格式数据
@@ -39,6 +40,7 @@ export function exportJSON(req, res) {
           avatar_color: link.avatar_color,
           is_pinned: link.is_pinned,
           pin_order: link.pin_order,
+          is_favorite: link.is_favorite,
           sort_order: link.sort_order,
         })),
       });
@@ -47,6 +49,14 @@ export function exportJSON(req, res) {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="cozy-nav-export.json"');
     res.send(JSON.stringify(result, null, 2));
+    // 操作日志：导出为敏感操作，留痕便于事后追溯数据外流
+    const linkCount = result.categories.reduce((sum, c) => sum + c.links.length, 0);
+    writeLog({
+      module: LOG_MODULE.IMPORT,
+      action: LOG_ACTION.EXPORT,
+      detail: `导出书签数据（JSON）：${result.categories.length} 个分类、${linkCount} 个书签`,
+      meta: { format: 'json', categories: result.categories.length, links: linkCount },
+    }, req);
   } catch (e) {
     // 不向客户端泄露内部错误细节，仅输出到日志
     console.log(`[${new Date().toISOString()}] [导出] [JSON] [失败] ${e.message}`);
@@ -97,6 +107,13 @@ export function exportBookmarks(req, res) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="cozy-nav-bookmarks.html"');
     res.send(html);
+    // 操作日志：导出为敏感操作，留痕便于事后追溯数据外流
+    writeLog({
+      module: LOG_MODULE.IMPORT,
+      action: LOG_ACTION.EXPORT,
+      detail: `导出书签数据（HTML）：${categories.length} 个分类`,
+      meta: { format: 'html', categories: categories.length },
+    }, req);
   } catch (e) {
     // 不向客户端泄露内部错误细节，仅输出到日志
     console.log(`[${new Date().toISOString()}] [导出] [HTML] [失败] ${e.message}`);
@@ -117,7 +134,24 @@ export function importJSON(req, res) {
   }
 
   const { categories } = body;
-  const stats = { categories: 0, links: 0, skipped: 0 };
+  // 统计：分类新建/复用、链接新增/更新/跳过（明细最多保留 50 条避免响应体过大）
+  const MAX_DETAILS = 50;
+  const stats = {
+    categoriesCreated: 0,
+    categoriesReused: 0,
+    linksCreated: 0,
+    linksUpdated: 0,
+    linksSkipped: 0,
+    skippedDetails: [],
+  };
+
+  /** 记录一条跳过明细：累计总数，明细超上限时不再追加 */
+  function pushSkip(name, url, reason) {
+    stats.linksSkipped++;
+    if (stats.skippedDetails.length < MAX_DETAILS) {
+      stats.skippedDetails.push({ name, url, reason });
+    }
+  }
 
   try {
     db.exec('BEGIN');
@@ -129,13 +163,14 @@ export function importJSON(req, res) {
       let existingCat = db.prepare('SELECT * FROM categories WHERE name = ? AND deleted_at IS NULL').get(cat.name);
       let catId;
 
-      if (existingCat && strategy === 'skip') {
+      if (existingCat) {
         catId = existingCat.id;
-      } else if (existingCat && strategy === 'overwrite') {
-        // 覆盖策略：将分类下旧链接软删除（保留历史数据，可恢复），随后重新导入
-        db.prepare('UPDATE links SET deleted_at = ? WHERE category_id = ? AND deleted_at IS NULL').run(new Date().toISOString(), existingCat.id);
-        catId = existingCat.id;
-        existingCat = null;
+        stats.categoriesReused++;
+        if (strategy === 'overwrite') {
+          // 覆盖策略：将分类下旧链接软删除（保留历史数据，可恢复），随后重新导入
+          db.prepare('UPDATE links SET deleted_at = ? WHERE category_id = ? AND deleted_at IS NULL').run(new Date().toISOString(), existingCat.id);
+          existingCat = null;
+        }
       } else {
         // 新增分类（未显式传排序权重时自动排到末尾）
         const info = db.prepare(
@@ -148,13 +183,16 @@ export function importJSON(req, res) {
           cat.sort_order ?? db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM categories WHERE deleted_at IS NULL').get().next
         );
         catId = info.lastInsertRowid;
-        stats.categories++;
+        stats.categoriesCreated++;
       }
 
       // 导入链接
       if (Array.isArray(cat.links)) {
         for (const link of cat.links) {
-          if (!link.name || !link.url) continue;
+          if (!link.name || !link.url) {
+            pushSkip(link.name, link.url, '缺少名称或地址');
+            continue;
+          }
 
           // 检查链接是否已存在：优先按 URL 规范化指纹判重，无法规范化时回退精确匹配
           const normalized = normalizeUrl(link.url);
@@ -167,26 +205,27 @@ export function importJSON(req, res) {
               ).get(catId, link.url);
 
           if (existingLink && strategy === 'skip') {
-            stats.skipped++;
+            pushSkip(link.name, link.url, '已存在');
             continue;
           }
 
           if (existingLink && strategy === 'overwrite') {
             db.prepare(
-              'UPDATE links SET name = ?, domain = ?, avatar_text = ?, avatar_color = ? WHERE id = ?'
+              'UPDATE links SET name = ?, domain = ?, avatar_text = ?, avatar_color = ?, is_favorite = ? WHERE id = ?'
             ).run(
               link.name,
               extractDomain(link.url),
               link.avatar_text || link.name[0],
               link.avatar_color || 'slate',
+              link.is_favorite ? 1 : 0,
               existingLink.id
             );
-            stats.links++;
+            stats.linksUpdated++;
           } else {
             // 新增链接（未显式传排序权重时自动排到该分类末尾）
             db.prepare(
-              `INSERT INTO links (category_id, name, url, domain, avatar_text, avatar_color, is_pinned, sort_order, url_normalized)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              `INSERT INTO links (category_id, name, url, domain, avatar_text, avatar_color, is_pinned, is_favorite, sort_order, url_normalized)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             ).run(
               catId,
               link.name,
@@ -195,17 +234,29 @@ export function importJSON(req, res) {
               link.avatar_text || link.name[0],
               link.avatar_color || 'slate',
               link.is_pinned || 0,
+              link.is_favorite ? 1 : 0,
               link.sort_order ?? db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM links WHERE category_id = ? AND deleted_at IS NULL').get(catId).next,
               normalized
             );
-            stats.links++;
+            stats.linksCreated++;
           }
         }
       }
     }
 
     db.exec('COMMIT');
-    jsonSuccess(res, stats, `导入成功：新增 ${stats.categories} 个分类，${stats.links} 个链接，跳过 ${stats.skipped} 个重复`);
+    // 操作日志：记录导入结果（含数量，异常大批量导入可事后追溯）
+    writeLog({
+      module: LOG_MODULE.IMPORT,
+      action: LOG_ACTION.IMPORT,
+      detail: `导入书签（JSON）：新建 ${stats.linksCreated} 个链接、更新 ${stats.linksUpdated} 个、跳过 ${stats.linksSkipped} 个、新建 ${stats.categoriesCreated} 个分类（策略：${strategy}）`,
+      meta: {
+        format: 'json', strategy,
+        categoriesCreated: stats.categoriesCreated, categoriesReused: stats.categoriesReused,
+        linksCreated: stats.linksCreated, linksUpdated: stats.linksUpdated, linksSkipped: stats.linksSkipped,
+      },
+    }, req);
+    jsonSuccess(res, stats, `导入成功：新建 ${stats.categoriesCreated} 个分类，新增 ${stats.linksCreated} 个链接，更新 ${stats.linksUpdated} 个，跳过 ${stats.linksSkipped} 个`);
   } catch (e) {
     db.exec('ROLLBACK');
     // 不向客户端泄露内部错误细节，仅输出到日志
@@ -226,9 +277,27 @@ export function importBookmarks(req, res) {
     return jsonError(res, '请提供 HTML 内容');
   }
 
+  // 统计：分类新建/复用、链接新增/更新/跳过（明细最多保留 50 条避免响应体过大）
+  const MAX_DETAILS = 50;
+  const stats = {
+    categoriesCreated: 0,
+    categoriesReused: 0,
+    linksCreated: 0,
+    linksUpdated: 0,
+    linksSkipped: 0,
+    skippedDetails: [],
+  };
+
+  /** 记录一条跳过明细：累计总数，明细超上限时不再追加 */
+  function pushSkip(name, url, reason) {
+    stats.linksSkipped++;
+    if (stats.skippedDetails.length < MAX_DETAILS) {
+      stats.skippedDetails.push({ name, url, reason });
+    }
+  }
+
   try {
     const parsed = parseBookmarkHTML(html);
-    const stats = { categories: 0, links: 0, skipped: 0 };
 
     db.exec('BEGIN');
 
@@ -239,24 +308,28 @@ export function importBookmarks(req, res) {
       let existingCat = db.prepare('SELECT * FROM categories WHERE name = ? AND deleted_at IS NULL').get(folder.name);
       let catId;
 
-      if (existingCat && strategy === 'skip') {
+      if (existingCat) {
         catId = existingCat.id;
-      } else if (existingCat && strategy === 'overwrite') {
-        // 覆盖策略：将分类下旧链接软删除（保留历史数据，可恢复），随后重新导入
-        db.prepare('UPDATE links SET deleted_at = ? WHERE category_id = ? AND deleted_at IS NULL').run(new Date().toISOString(), existingCat.id);
-        catId = existingCat.id;
-        existingCat = null;
+        stats.categoriesReused++;
+        if (strategy === 'overwrite') {
+          // 覆盖策略：将分类下旧链接软删除（保留历史数据，可恢复），随后重新导入
+          db.prepare('UPDATE links SET deleted_at = ? WHERE category_id = ? AND deleted_at IS NULL').run(new Date().toISOString(), existingCat.id);
+          existingCat = null;
+        }
       } else {
         const info = db.prepare(
           'INSERT INTO categories (name, emoji, bg_color, sort_order) VALUES (?, ?, ?, ?)'
         ).run(folder.name, '📁', 'slate', db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM categories WHERE deleted_at IS NULL').get().next);
         catId = info.lastInsertRowid;
-        stats.categories++;
+        stats.categoriesCreated++;
       }
 
       // 导入链接
       for (const link of folder.links) {
-        if (!link.name || !link.url) continue;
+        if (!link.name || !link.url) {
+          pushSkip(link.name, link.url, '缺少名称或地址');
+          continue;
+        }
 
         // 检查链接是否已存在：优先按 URL 规范化指纹判重，无法规范化时回退精确匹配
         const normalized = normalizeUrl(link.url);
@@ -269,7 +342,7 @@ export function importBookmarks(req, res) {
             ).get(catId, link.url);
 
         if (existingLink && strategy === 'skip') {
-          stats.skipped++;
+          pushSkip(link.name, link.url, '已存在');
           continue;
         }
 
@@ -277,20 +350,31 @@ export function importBookmarks(req, res) {
           db.prepare(
             'UPDATE links SET name = ?, domain = ?, avatar_text = ? WHERE id = ?'
           ).run(link.name, extractDomain(link.url), link.name[0], existingLink.id);
-          stats.links++;
+          stats.linksUpdated++;
         } else {
           // 新增链接（未显式传排序权重时自动排到该分类末尾）
           db.prepare(
             `INSERT INTO links (category_id, name, url, domain, avatar_text, avatar_color, sort_order, url_normalized)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
           ).run(catId, link.name, link.url, extractDomain(link.url), link.name[0], 'slate', db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM links WHERE category_id = ? AND deleted_at IS NULL').get(catId).next, normalized);
-          stats.links++;
+          stats.linksCreated++;
         }
       }
     }
 
     db.exec('COMMIT');
-    jsonSuccess(res, stats, `导入成功：新增 ${stats.categories} 个分类，${stats.links} 个链接，跳过 ${stats.skipped} 个重复`);
+    // 操作日志：记录导入结果（含数量，异常大批量导入可事后追溯）
+    writeLog({
+      module: LOG_MODULE.IMPORT,
+      action: LOG_ACTION.IMPORT,
+      detail: `导入书签（HTML）：新建 ${stats.linksCreated} 个链接、更新 ${stats.linksUpdated} 个、跳过 ${stats.linksSkipped} 个、新建 ${stats.categoriesCreated} 个分类（策略：${strategy}）`,
+      meta: {
+        format: 'html', strategy,
+        categoriesCreated: stats.categoriesCreated, categoriesReused: stats.categoriesReused,
+        linksCreated: stats.linksCreated, linksUpdated: stats.linksUpdated, linksSkipped: stats.linksSkipped,
+      },
+    }, req);
+    jsonSuccess(res, stats, `导入成功：新建 ${stats.categoriesCreated} 个分类，新增 ${stats.linksCreated} 个链接，更新 ${stats.linksUpdated} 个，跳过 ${stats.linksSkipped} 个`);
   } catch (e) {
     db.exec('ROLLBACK');
     // 不向客户端泄露内部错误细节，仅输出到日志

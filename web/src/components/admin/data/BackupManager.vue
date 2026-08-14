@@ -1,11 +1,12 @@
 <script setup>
 /**
- * 数据管理页 - 自动备份卡片（#84 本地备份 + #85 Git 异地备份）
- * - 自动备份开关（每天 03:00 生成一致快照，保留 retainDays 天）
- * - Git 异地备份：本地快照成功后自动推送到私有仓库（建议 Gitee，国内稳定）
- * - 立即备份按钮 + 最近备份记录（时间/大小/Git 推送状态）
+ * 数据管理页 - 自动备份卡片（本地备份 + 增量跳过 + 坚果云 WebDAV 云端备份）
+ * - 自动备份开关（每天 03:00 生成一致快照，保留 retainCount 份）
+ * - 增量备份：数据无变化（指纹一致）时跳过，不生成重复快照
+ * - 坚果云 WebDAV：本地快照自动上传到云端，实现双保险
+ * - 立即备份按钮 + 最近备份记录（时间/大小）
  */
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { NCard, NSwitch, NInput, NInputNumber, NButton, useMessage, NEmpty } from 'naive-ui';
 import { backupApi } from '../../../api/backup.js';
 
@@ -15,65 +16,26 @@ const message = useMessage();
 const DEFAULT_CONFIG = {
   autoEnabled: true,
   retainCount: 5,
-  gitEnabled: false,
-  gitRemote: '',
-  gitBranch: 'main',
+  webdav: {
+    enabled: false,
+    url: 'https://dav.jianguoyun.com/dav/',
+    user: '',
+    pass: '',
+    path: 'cozy-nav-backup',
+    retainCount: 3,
+  },
 };
 
 const form = ref({ ...DEFAULT_CONFIG });
-const gitRepoReady = ref(false);
-const showSteps = ref(false);
 const saving = ref(false);
 const running = ref(false);
-const backups = ref([]);
+const testing = ref(false);
+const backups = ref({ local: [], webdav: [] });
 const loadingList = ref(false);
-
-/** 服务器真实数据目录（由后端返回，任何部署路径都正确） */
-const dataDir = ref('server/data');
-
-/** Git 仓库初始化步骤引导（面向新用户，路径动态取服务器真实目录，命令可一键复制） */
-const gitSteps = computed(() => [
-  {
-    title: '在 Gitee 新建「私有」仓库',
-    desc: '登录 gitee.com → 右上角「+」→ 新建仓库 → 仓库名填 cozy-nav-backup → 勾选「私有」→ 创建后复制仓库地址。',
-    cmd: '',
-  },
-  {
-    title: '打开终端，进入 data 目录',
-    desc: `在服务器上进入项目目录，打开终端并执行（路径已自动生成）：`,
-    cmd: `cd ${dataDir.value}`,
-  },
-  {
-    title: '初始化本地仓库',
-    desc: '在 data 目录下执行（只需一次）：',
-    cmd: 'git init',
-  },
-  {
-    title: '关联远程仓库',
-    desc: '把下方地址换成你在 Gitee 复制的地址（只需一次）：',
-    cmd: 'git remote add origin https://gitee.com/你的账号/cozy-nav-backup.git',
-  },
-  {
-    title: '创建 .gitignore（排除本地备份）',
-    desc: `在 ${dataDir.value} 下新建文件 .gitignore，内容填入：`,
-    cmd: 'backups/\nfavicons/.failed/',
-  },
-  {
-    title: '首次提交并推送',
-    desc: '首次会弹出浏览器登录 Gitee 窗口，授权后自动记住，以后无需再输密码：',
-    cmd: 'git add -A\ngit commit -m "first backup"\ngit push -u origin main',
-  },
-]);
-
-/** 复制单条命令到剪贴板 */
-async function copyCmd(cmd) {
-  try {
-    await navigator.clipboard.writeText(cmd);
-    message.success('命令已复制，粘贴到终端执行即可');
-  } catch {
-    message.warning('复制失败，请手动选择复制');
-  }
-}
+/** 坚果云云端记录查询状态（未启用 / 成功 / 失败原因） */
+const webdavEnabled = ref(false);
+const webdavOk = ref(true);
+const webdavReason = ref('');
 
 /** 格式化文件大小（B/KB/MB） */
 function formatSize(bytes) {
@@ -83,34 +45,27 @@ function formatSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(2)}MB`;
 }
 
-/** 备份记录 Git 状态文案：未开 Git → 本地；已开 → 按是否实际推送成功显示 */
-function gitBadgeText(bk) {
-  if (!form.value.gitEnabled) return '本地';
-  return bk.hasGit ? '本地 + 已推送 Git' : '本地 + Git 未推送';
-}
-
-/** 备份记录 Git 状态样式：on=成功推送 / off=仅本地 / fail=开了 Git 但本次未推送 */
-function gitBadgeClass(bk) {
-  if (!form.value.gitEnabled) return 'off';
-  return bk.hasGit ? 'on' : 'fail';
-}
-
 /** 加载配置 + 备份记录 */
 async function fetchConfig() {
   try {
     const res = await backupApi.getConfig();
     const cfg = res.data || {};
-    form.value = { ...DEFAULT_CONFIG, ...cfg };
-    gitRepoReady.value = !!cfg.gitRepoReady;
-    if (cfg.dataDir) dataDir.value = cfg.dataDir;
+    form.value = {
+      ...DEFAULT_CONFIG,
+      ...cfg,
+      webdav: { ...DEFAULT_CONFIG.webdav, ...(cfg.webdav || {}) },
+    };
   } catch { /* 未登录等场景静默 */ }
 }
 
 async function fetchList() {
   loadingList.value = true;
   try {
-    const res = await backupApi.list();
-    backups.value = res.data || [];
+    const d = (await backupApi.list()).data || {};
+    backups.value = { local: d.local || [], webdav: d.webdav || [] };
+    webdavEnabled.value = !!d.webdavEnabled;
+    webdavOk.value = d.webdavOk !== false;
+    webdavReason.value = d.webdavReason || '';
   } catch { /* 静默 */ } finally {
     loadingList.value = false;
   }
@@ -121,16 +76,15 @@ onMounted(() => {
   fetchList();
 });
 
-/** 保存配置 */
+/** 保存配置（webdav.pass 留空则后端保留原密码） */
 async function handleSave() {
-  if (form.value.gitEnabled && !form.value.gitRemote.trim()) {
-    message.warning('启用 Git 备份需先填写仓库地址');
-    return;
-  }
   saving.value = true;
   try {
-    const res = await backupApi.saveConfig({ ...form.value });
-    gitRepoReady.value = !!res.data?.gitRepoReady;
+    await backupApi.saveConfig({
+      autoEnabled: form.value.autoEnabled,
+      retainCount: form.value.retainCount,
+      webdav: { ...form.value.webdav },
+    });
     message.success('备份配置已保存');
   } catch (e) {
     message.warning(e?.message || '保存失败');
@@ -139,7 +93,7 @@ async function handleSave() {
   }
 }
 
-/** 立即备份（跟随配置决定是否推 Git） */
+/** 立即备份（增量判断：数据无变化则提示跳过；启用 WebDAV 同步上传云端） */
 async function handleRun() {
   running.value = true;
   try {
@@ -152,14 +106,30 @@ async function handleRun() {
     running.value = false;
   }
 }
+
+/** 测试坚果云 WebDAV 连接（实时测试，不保存） */
+async function handleTest() {
+  if (!form.value.webdav.url.trim() || !form.value.webdav.user.trim() || !form.value.webdav.pass.trim()) {
+    message.warning('请先填写 WebDAV 地址、坚果云账号和应用密码');
+    return;
+  }
+  testing.value = true;
+  try {
+    const res = await backupApi.testWebdav({ ...form.value.webdav });
+    message.success(res?.message || '坚果云连接成功');
+  } catch (e) {
+    message.warning(e?.message || '连接失败');
+  } finally {
+    testing.value = false;
+  }
+}
 </script>
 
 <template>
   <n-card class="setting-card" title="🛡️ 自动备份" hoverable>
     <p class="hint">
       每天 03:00 自动生成数据快照（数据库 + 图标 + 站点 Logo），最多保留 {{ form.retainCount }} 份，超出自动删除最旧的。
-      开启 Git 异地备份后，快照会自动推送到私有仓库，硬盘损坏也能恢复。
-      <br />关闭「Git 备份」开关即停用推送（本地快照照常），已推送到仓库的历史数据保留；更换仓库地址保存后，下次备份自动推送到新仓库。
+      <br />增量备份：数据无变化时自动跳过，不生成重复快照（更省磁盘、记录更清晰）。
     </p>
 
     <!-- 自动备份 -->
@@ -175,61 +145,53 @@ async function handleRun() {
       <span class="notify-state">份（超出删最旧）</span>
     </div>
 
-    <!-- Git 异地备份子模块 -->
+    <!-- 坚果云 WebDAV 云端备份子模块 -->
     <div class="channel-block">
       <div class="channel-head">
-        <span class="channel-title">🌐 Git 异地备份</span>
-        <n-switch v-model:value="form.gitEnabled" size="small" />
+        <span class="channel-title">☁️ 坚果云 WebDAV 备份</span>
+        <n-switch v-model:value="form.webdav.enabled" size="small" />
       </div>
-      <!-- 开启 Git 后的行为提示：本地备份依然照常（单行横幅） -->
-      <div v-if="form.gitEnabled" class="git-on-hint">
-        <span class="git-on-icon">✓</span>
-        <span class="git-on-text"><strong>本地快照照常保留</strong>（最多 {{ form.retainCount }} 份），同时自动推送远程仓库，本地 + 云端双保险</span>
-      </div>
+      <p class="hint channel-hint">
+        云端只上传数据库 + 站点 Logo（favicons 图标为可再生缓存，不上传，省流量）。
+        注意：坚果云免费版每月上下行合计 1GB 流量。
+      </p>
       <div class="notify-row">
-        <span class="notify-label">仓库地址</span>
+        <span class="notify-label">WebDAV 地址</span>
         <n-input
-          v-model:value="form.gitRemote"
-          placeholder="如 https://gitee.com/你的账号/cozy-nav-backup.git"
+          v-model:value="form.webdav.url"
+          placeholder="https://dav.jianguoyun.com/dav/"
           class="notify-control"
           clearable
         />
       </div>
       <div class="notify-row">
-        <span class="notify-label">分支名</span>
-        <n-input v-model:value="form.gitBranch" placeholder="main" class="notify-control" />
+        <span class="notify-label">坚果云账号</span>
+        <n-input v-model:value="form.webdav.user" placeholder="登录邮箱（如 xxx@qq.com）" class="notify-control" clearable />
+      </div>
+      <div class="notify-row">
+        <span class="notify-label">应用密码</span>
+        <n-input
+          v-model:value="form.webdav.pass"
+          type="password"
+          show-password-on="click"
+          placeholder="不修改请留空"
+          class="notify-control"
+        />
+      </div>
+      <div class="notify-row">
+        <span class="notify-label">远程目录</span>
+        <n-input v-model:value="form.webdav.path" placeholder="cozy-nav-backup（自动创建）" class="notify-control" clearable />
+      </div>
+      <div class="notify-row">
+        <span class="notify-label">云端保留</span>
+        <n-input-number v-model:value="form.webdav.retainCount" :min="1" :max="30" class="notify-control" />
+        <span class="notify-state">份（超出删最旧）</span>
       </div>
       <p class="hint channel-hint">
-        建议使用 Gitee（码云）私有仓库，国内服务器推送稳定。凭据走系统 Git（Credential Manager），不会保存在本系统内。
+        应用密码获取：登录坚果云网页端 → 右上角头像 → 账户信息 → 安全选项 → 应用密码 → 添加（授权访问 WebDAV）。
       </p>
-
-      <!-- Git 仓库初始化状态 + 引导步骤 -->
-      <div class="git-status" :class="gitRepoReady ? 'ok' : 'warn'">
-        <span v-if="gitRepoReady">✅ 本地 git 仓库已就绪，可直接开始备份</span>
-        <span v-else>⚠️ 首次使用需先完成下面的仓库初始化（仅需一次）</span>
-      </div>
-
-      <div v-if="!gitRepoReady" class="git-steps">
-        <div v-for="(step, i) in gitSteps" :key="i" class="git-step">
-          <div class="git-step-head">
-            <span class="git-step-no">{{ i + 1 }}</span>
-            <span class="git-step-title">{{ step.title }}</span>
-            <n-button
-              v-if="step.cmd"
-              size="tiny"
-              quaternary
-              class="git-copy-btn"
-              @click="copyCmd(step.cmd)"
-            >
-              复制命令
-            </n-button>
-          </div>
-          <p class="git-step-desc">{{ step.desc }}</p>
-          <div v-if="step.cmd" class="git-cmd">{{ step.cmd }}</div>
-        </div>
-        <p class="hint channel-hint">
-          ✅ 全部完成后，把上面的仓库地址填入「仓库地址」框 → 打开 Git 开关 → 点「保存配置」即可。
-        </p>
+      <div class="cfg-actions">
+        <n-button size="small" :loading="testing" @click="handleTest">🧪 测试连接</n-button>
       </div>
     </div>
 
@@ -238,20 +200,35 @@ async function handleRun() {
       <n-button :loading="saving" @click="handleSave">保存配置</n-button>
     </div>
 
-    <!-- 最近备份记录 -->
+    <!-- 最近备份记录（区分本地 / 坚果云云端） -->
     <p class="cfg-group-title">最近备份记录</p>
     <div v-if="loadingList" class="list-hint">加载中…</div>
-    <div v-else-if="!backups.length" class="list-hint">
+    <div v-else-if="!backups.local.length && !webdavEnabled" class="list-hint">
       <n-empty description="暂无备份记录，点击「立即备份」生成第一份快照" size="small" />
     </div>
-    <div v-else class="bk-list">
-      <div v-for="bk in backups" :key="bk.name" class="bk-item">
-        <span class="bk-name">🕐 {{ bk.time }}</span>
-        <span class="bk-size">{{ formatSize(bk.size) }}</span>
-        <span class="bk-git" :class="gitBadgeClass(bk)">
-          {{ gitBadgeText(bk) }}
-        </span>
-      </div>
+    <div v-else class="bk-wrap">
+      <template v-if="backups.local.length || webdavEnabled">
+        <template v-if="backups.local.length">
+          <p class="bk-group">💾 本地备份</p>
+          <div class="bk-list">
+            <div v-for="bk in backups.local" :key="'l-' + bk.name" class="bk-item">
+              <span class="bk-name">🕐 {{ bk.time }}</span>
+              <span class="bk-size">{{ formatSize(bk.size) }}</span>
+            </div>
+          </div>
+        </template>
+        <template v-if="webdavEnabled">
+          <p class="bk-group">☁️ 坚果云备份</p>
+          <p v-if="!webdavOk" class="bk-hint">⚠️ {{ webdavReason }}</p>
+          <p v-else-if="!backups.webdav.length" class="bk-hint">云端暂无备份记录，下次「立即备份」后自动上传</p>
+          <div v-else class="bk-list">
+            <div v-for="bk in backups.webdav" :key="'w-' + bk.name" class="bk-item">
+              <span class="bk-name">🕐 {{ bk.time }}</span>
+              <span class="bk-size">—</span>
+            </div>
+          </div>
+        </template>
+      </template>
     </div>
   </n-card>
 </template>
@@ -307,7 +284,7 @@ async function handleRun() {
   font-weight: 600;
 }
 
-/* Git 子模块 */
+/* WebDAV 云端备份子模块 */
 .channel-block {
   margin-top: 16px;
   padding: clamp(10px, 1.4vw, 14px);
@@ -325,40 +302,6 @@ async function handleRun() {
   justify-content: space-between;
   gap: 10px;
 }
-/* 开启 Git 后的行为提示：绿色横幅（单行） */
-.git-on-hint {
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--admin-peach-dark, #1e7a4a);
-  background: color-mix(in oklab, var(--admin-peach, #34b47e) 14%, var(--admin-card));
-  border: 1px solid color-mix(in oklab, var(--admin-peach, #34b47e) 45%, transparent);
-}
-.git-on-icon {
-  flex: none;
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  font-size: 12px;
-  font-weight: 700;
-  color: #fff;
-  background: var(--admin-peach, #34b47e);
-}
-.git-on-text {
-  font-size: 13px;
-  line-height: 1.6;
-}
-.git-on-text strong {
-  font-weight: 700;
-}
 .channel-title {
   font-size: clamp(13px, 1.6vw, 14px);
   font-weight: 600;
@@ -368,87 +311,8 @@ async function handleRun() {
   margin-top: 8px;
   font-size: 12px;
 }
-
-/* Git 初始化状态提示（统一绿/中性灰，不用黄橙警告色） */
-.git-status {
+.channel-block .cfg-actions {
   margin-top: 12px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.6;
-}
-.git-status.ok {
-  color: var(--admin-peach-dark, #1e7a4a);
-  background: color-mix(in oklab, var(--admin-peach, #34b47e) 10%, transparent);
-  border: 1px solid color-mix(in oklab, var(--admin-peach, #34b47e) 30%, transparent);
-}
-.git-status.warn {
-  color: var(--admin-text-2, #5a4a3f);
-  background: color-mix(in oklab, var(--admin-card) 40%, transparent);
-  border: 1px solid var(--admin-border, rgba(120, 100, 90, 0.15));
-}
-
-/* Git 初始化步骤列表 */
-.git-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 12px;
-}
-.git-step {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: color-mix(in oklab, var(--admin-card) 45%, transparent);
-  border: 1px solid var(--admin-border, rgba(120, 100, 90, 0.1));
-}
-.git-step-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.git-step-no {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--admin-accent);
-  color: var(--admin-on-accent, #fff);
-  font-size: 11px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.git-step-title {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--admin-text);
-}
-.git-copy-btn {
-  flex-shrink: 0;
-  font-size: 11px;
-}
-.git-step-desc {
-  margin: 6px 0 0 28px;
-  font-size: 12px;
-  color: var(--admin-muted);
-  line-height: 1.6;
-}
-.git-cmd {
-  margin: 6px 0 0 28px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.35);
-  color: #d8e0e8;
-  font-family: Consolas, 'Courier New', monospace;
-  font-size: 12px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: break-all;
-  user-select: all;
 }
 
 .cfg-actions {
@@ -482,6 +346,24 @@ async function handleRun() {
   color: var(--admin-muted);
   padding: 12px 0;
 }
+.bk-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* 备份来源分组小标题（本地 / 坚果云） */
+.bk-group {
+  margin: 4px 0 0;
+  font-size: clamp(12px, 1.5vw, 13px);
+  font-weight: 600;
+  color: var(--pop);
+}
+/* 云端查询失败 / 空记录提示 */
+.bk-hint {
+  margin: 4px 0 0;
+  font-size: clamp(12px, 1.5vw, 13px);
+  color: var(--cherry);
+}
 .bk-list {
   display: flex;
   flex-direction: column;
@@ -508,30 +390,6 @@ async function handleRun() {
   flex-shrink: 0;
   color: var(--admin-muted);
   font-variant-numeric: tabular-nums;
-}
-/* 备份记录 Git 状态徽章：on=本地+已推送 / fail=开启但未推送 / off=仅本地（统一绿色系/中性） */
-.bk-git {
-  flex-shrink: 0;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 8px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.bk-git.on {
-  color: var(--admin-peach-dark, #1e7a4a);
-  background: color-mix(in oklab, var(--admin-peach, #34b47e) 14%, transparent);
-  border: 1px solid color-mix(in oklab, var(--admin-peach, #34b47e) 35%, transparent);
-}
-.bk-git.fail {
-  color: var(--admin-text-2, #5a4a3f);
-  background: color-mix(in oklab, var(--admin-card) 60%, transparent);
-  border: 1px dashed var(--admin-border, rgba(120, 100, 90, 0.25));
-}
-.bk-git.off {
-  color: var(--admin-muted);
-  background: color-mix(in oklab, var(--admin-card) 60%, transparent);
-  border: 1px solid var(--admin-border, rgba(120, 100, 90, 0.12));
 }
 
 /* 移动端适配 */

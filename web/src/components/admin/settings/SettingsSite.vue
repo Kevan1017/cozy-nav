@@ -173,6 +173,36 @@ async function handleToggleIdleMark(val) {
   }
 }
 
+/** 前台置顶板块开关 */
+async function handleTogglePinStrip(val) {
+  try {
+    await prefsStore.updatePinStripEnabled(val);
+    message.success(val ? '置顶板块已开启' : '置顶板块已关闭');
+  } catch (err) {
+    message.warning(err.message || '保存失败');
+  }
+}
+
+/** 前台常用书签标记开关 */
+async function handleToggleFavoriteMark(val) {
+  try {
+    await prefsStore.updateFavoriteMarkEnabled(val);
+    message.success(val ? '常用书签标记已开启' : '常用书签标记已关闭');
+  } catch (err) {
+    message.warning(err.message || '保存失败');
+  }
+}
+
+/** 无图模式开关 */
+async function handleToggleNoImage(val) {
+  try {
+    await prefsStore.updateNoImage(val);
+    message.success(val ? '无图模式已开启' : '无图模式已关闭');
+  } catch (err) {
+    message.warning(err.message || '保存失败');
+  }
+}
+
 /* ---------- 视图布局 ---------- */
 /** 视图布局功能开关 */
 async function handleToggleViewLayout(val) {
@@ -445,6 +475,42 @@ onMounted(() => {
           <n-switch
             :value="prefsStore.idleMarkEnabled"
             @update:value="handleToggleIdleMark"
+          />
+        </div>
+
+        <!-- 置顶板块开关 -->
+        <div class="display-row">
+          <div class="display-info">
+            <div class="display-title">置顶板块</div>
+            <div class="display-desc">开启后前台显示置顶书签快捷栏；关闭后隐藏该板块（不影响书签的置顶标记，重新开启即恢复显示）</div>
+          </div>
+          <n-switch
+            :value="prefsStore.pinStripEnabled"
+            @update:value="handleTogglePinStrip"
+          />
+        </div>
+
+        <!-- 常用书签标记开关 -->
+        <div class="display-row">
+          <div class="display-info">
+            <div class="display-title">常用书签标记</div>
+            <div class="display-desc">前台被标记为「常用」的书签右上角显示金色星标；关闭后星标隐藏（标记保留，重新开启即恢复显示）</div>
+          </div>
+          <n-switch
+            :value="prefsStore.favoriteMarkEnabled"
+            @update:value="handleToggleFavoriteMark"
+          />
+        </div>
+
+        <!-- 无图模式开关 -->
+        <div class="display-row">
+          <div class="display-info">
+            <div class="display-title">无图模式</div>
+            <div class="display-desc">前台隐藏书签的网站图标与字母头像，卡片只显示文字，视觉更简洁且节省流量</div>
+          </div>
+          <n-switch
+            :value="prefsStore.noImage"
+            @update:value="handleToggleNoImage"
           />
         </div>
 

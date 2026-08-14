@@ -29,6 +29,8 @@ export const usePrefsStore = defineStore('prefs', () => {
   const themePreset = ref(migratePresetKey(localStorage.getItem('themePreset')));
   /** 是否在前台显示域名（默认显示） */
   const showDomain = ref(localStorage.getItem('showDomain') !== '0');
+  /** 无图模式（默认关闭）：开启后前台隐藏 favicon / 字母头像，纯文字卡片 */
+  const noImage = ref(localStorage.getItem('noImage') === '1');
   /** 视图模式：card（卡片）/ list（列表）/ compact（紧凑） */
   const viewMode = ref(localStorage.getItem('viewMode') || 'card');
   /** 视图布局功能开关（默认开启）：开启后可后台设置默认布局、前台手动切换仅本地生效 */
@@ -47,6 +49,10 @@ export const usePrefsStore = defineStore('prefs', () => {
   const festivalCountdownEnabled = ref(localStorage.getItem('festivalCountdownEnabled') !== '0');
   /** 闲置书签标记是否开启（默认关闭，与后端 idle_mark_enabled 默认 0 一致） */
   const idleMarkEnabled = ref(localStorage.getItem('idleMarkEnabled') === '1');
+  /** 前台置顶板块是否显示（默认开启，与后端 pin_strip_enabled 默认 1 一致） */
+  const pinStripEnabled = ref(localStorage.getItem('pinStripEnabled') !== '0');
+  /** 前台常用书签星标是否显示（默认开启，与后端 favorite_mark_enabled 默认 1 一致） */
+  const favoriteMarkEnabled = ref(localStorage.getItem('favoriteMarkEnabled') !== '0');
   /** 统计卡底部标语（可在后台编辑，默认英文手写体） */
   const statTagline = ref(localStorage.getItem('statTagline') || '— everything in its place —');
   /** 自定义配色覆盖层：{light:{--bg:'#xxx',...}, dark:{...}}，改过的项覆盖预设 */
@@ -90,6 +96,10 @@ export const usePrefsStore = defineStore('prefs', () => {
     // show_domain 后端存 0/1，转 boolean
     if (res.data.show_domain !== undefined && res.data.show_domain !== null) {
       showDomain.value = !!res.data.show_domain;
+    }
+    // no_image 后端存 0/1，转 boolean
+    if (res.data.no_image !== undefined && res.data.no_image !== null) {
+      noImage.value = !!res.data.no_image;
     }
     // 视图布局功能开关（站点级配置，同步到本地以便前台按钮显隐）
     if (res.data.view_layout_enabled !== undefined && res.data.view_layout_enabled !== null) {
@@ -138,6 +148,12 @@ export const usePrefsStore = defineStore('prefs', () => {
     }
     if (res.data.idle_mark_enabled !== undefined && res.data.idle_mark_enabled !== null) {
       idleMarkEnabled.value = !!res.data.idle_mark_enabled;
+    }
+    if (res.data.pin_strip_enabled !== undefined && res.data.pin_strip_enabled !== null) {
+      pinStripEnabled.value = !!res.data.pin_strip_enabled;
+    }
+    if (res.data.favorite_mark_enabled !== undefined && res.data.favorite_mark_enabled !== null) {
+      favoriteMarkEnabled.value = !!res.data.favorite_mark_enabled;
     }
     if (res.data.stat_tagline !== undefined && res.data.stat_tagline !== null) {
       statTagline.value = res.data.stat_tagline;
@@ -204,6 +220,15 @@ export const usePrefsStore = defineStore('prefs', () => {
     localStorage.setItem('showDomain', val ? '1' : '0');
     if (localStorage.getItem('token')) {
       await prefsApi.update({ show_domain: val ? 1 : 0 });
+    }
+  }
+
+  /** 更新无图模式（后台设置，全站生效） */
+  async function updateNoImage(val) {
+    noImage.value = val;
+    localStorage.setItem('noImage', val ? '1' : '0');
+    if (localStorage.getItem('token')) {
+      await prefsApi.update({ no_image: val ? 1 : 0 });
     }
   }
 
@@ -310,6 +335,24 @@ export const usePrefsStore = defineStore('prefs', () => {
     }
   }
 
+  /** 更新前台置顶板块显示开关（后台设置） */
+  async function updatePinStripEnabled(val) {
+    pinStripEnabled.value = val;
+    localStorage.setItem('pinStripEnabled', val ? '1' : '0');
+    if (localStorage.getItem('token')) {
+      await prefsApi.update({ pin_strip_enabled: val ? 1 : 0 });
+    }
+  }
+
+  /** 更新前台常用书签星标显示开关（后台设置） */
+  async function updateFavoriteMarkEnabled(val) {
+    favoriteMarkEnabled.value = val;
+    localStorage.setItem('favoriteMarkEnabled', val ? '1' : '0');
+    if (localStorage.getItem('token')) {
+      await prefsApi.update({ favorite_mark_enabled: val ? 1 : 0 });
+    }
+  }
+
   /** 更新统计卡标语 */
   async function updateStatTagline(val) {
     statTagline.value = val || '— everything in its place —';
@@ -379,6 +422,7 @@ export const usePrefsStore = defineStore('prefs', () => {
     localStorage.setItem('searchEngine', searchEngine.value);
     localStorage.setItem('themePreset', themePreset.value);
     localStorage.setItem('showDomain', showDomain.value ? '1' : '0');
+    localStorage.setItem('noImage', noImage.value ? '1' : '0');
     localStorage.setItem('viewMode', viewMode.value);
     localStorage.setItem('viewLayoutEnabled', viewLayoutEnabled.value ? '1' : '0');
     localStorage.setItem('fontFamily', fontFamily.value);
@@ -387,6 +431,8 @@ export const usePrefsStore = defineStore('prefs', () => {
     localStorage.setItem('festivalEnabled', festivalEnabled.value ? '1' : '0');
     localStorage.setItem('festivalCountdownEnabled', festivalCountdownEnabled.value ? '1' : '0');
     localStorage.setItem('idleMarkEnabled', idleMarkEnabled.value ? '1' : '0');
+    localStorage.setItem('pinStripEnabled', pinStripEnabled.value ? '1' : '0');
+    localStorage.setItem('favoriteMarkEnabled', favoriteMarkEnabled.value ? '1' : '0');
     localStorage.setItem('statTagline', statTagline.value);
     localStorage.setItem('customTheme', JSON.stringify(customTheme.value));
     localStorage.setItem('siteTitle', siteTitle.value);
@@ -402,6 +448,7 @@ export const usePrefsStore = defineStore('prefs', () => {
     searchEngine,
     themePreset,
     showDomain,
+    noImage,
     viewMode,
     viewLayoutEnabled,
     defaultViewMode,
@@ -411,6 +458,8 @@ export const usePrefsStore = defineStore('prefs', () => {
     festivalEnabled,
     festivalCountdownEnabled,
     idleMarkEnabled,
+    pinStripEnabled,
+    favoriteMarkEnabled,
     statTagline,
     customTheme,
     siteTitle,
@@ -425,6 +474,7 @@ export const usePrefsStore = defineStore('prefs', () => {
     updateSearchEngine,
     updateThemePreset,
     updateShowDomain,
+    updateNoImage,
     updateViewMode,
     updateViewLayoutEnabled,
     updateDefaultViewMode,
@@ -435,6 +485,8 @@ export const usePrefsStore = defineStore('prefs', () => {
     updateFestivalEnabled,
     updateFestivalCountdownEnabled,
     updateIdleMarkEnabled,
+    updatePinStripEnabled,
+    updateFavoriteMarkEnabled,
     updateStatTagline,
     updateCustomTheme,
     updateSiteBasic,

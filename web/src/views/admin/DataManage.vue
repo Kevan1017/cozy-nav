@@ -2,7 +2,7 @@
 /**
  * 后台 - 数据管理（独立菜单页，从网站设置抽离）
  * - DataImportExport 📦 导出 / 导入（JSON / 浏览器书签）
- * - BackupManager    🛡️ 自动备份（每天 03:00 本地快照 + Git 异地备份 + 备份记录）
+ * - BackupManager    🛡️ 自动备份（每天 03:00 本地快照 + 增量跳过 + 备份记录）
  */
 import { NPageHeader } from 'naive-ui';
 import DataImportExport from '../../components/admin/data/DataImportExport.vue';

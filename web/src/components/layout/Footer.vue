@@ -1,7 +1,7 @@
 <script setup>
 /**
  * 底部栏：版权 + 手写签名
- * 版权文案固定模板：Copyright ©{当前年份} {网站标题}. All Rights Reserved.
+ * 版权文案固定模板：©{当前年份} {网站标题}
  * 网站标题可在后台「基本配置」中修改，标题带链接跳转首页
  */
 import { computed, ref, onMounted } from 'vue';
@@ -32,9 +32,8 @@ onMounted(async () => {
   <div class="foot">
     <div class="l">
       <span class="copyright">
-        Copyright ©{{ currentYear }}
+        ©{{ currentYear }}
         <a href="/" class="copy-link">{{ copyrightText }}</a>
-        . All Rights Reserved.
       </span>
       <span v-if="appVersion" class="ver">{{ appVersion }}</span>
     </div>
@@ -109,5 +108,23 @@ onMounted(async () => {
 
 .foot .sep {
   opacity: .6;
+}
+
+/* 移动端：页脚保持单行横向排列，不换行；内容超长时左侧版权行收缩省略，签名完整显示 */
+@media (max-width: 768px) {
+  .foot {
+    flex-wrap: nowrap;
+  }
+
+  .foot .l {
+    flex: 1;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+
+  .foot .sig {
+    flex: none;
+  }
 }
 </style>

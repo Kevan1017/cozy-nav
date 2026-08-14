@@ -89,7 +89,7 @@ function isValidHealthConfig(val) {
  * - channels.serverchan: {enabled, sendKey}
  * - channels.email: {enabled, host, port(465|587), user, pass, to}
  * - events.patrol: {enabled, strategy(abnormal|always), minIssues, titleTemplate, bodyTemplate}
- * - events.gitBackup: {enabled, onSuccess, onFailure, titleTemplate, bodyTemplate}
+ * - events.backup: {enabled, onSuccess, onFailure, titleTemplate, bodyTemplate}
  */
 function isValidNotificationConfig(val) {
   if (typeof val !== 'object' || val === null || Array.isArray(val)) return false;
@@ -136,7 +136,7 @@ function isValidNotificationConfig(val) {
   // ===== events 事件校验 =====
   if (val.events !== undefined) {
     if (typeof val.events !== 'object' || val.events === null || Array.isArray(val.events)) return false;
-    const evAllowed = ['patrol', 'gitBackup'];
+    const evAllowed = ['patrol', 'backup'];
     for (const k of Object.keys(val.events)) {
       if (!evAllowed.includes(k)) return false;
     }
@@ -159,9 +159,9 @@ function isValidNotificationConfig(val) {
       if (ev.strategy !== undefined && !['abnormal', 'always'].includes(ev.strategy)) return false;
       if (ev.minIssues !== undefined && (!Number.isInteger(ev.minIssues) || ev.minIssues < 1 || ev.minIssues > 100)) return false;
     }
-    // gitBackup 事件：onSuccess + onFailure
-    if (val.events.gitBackup !== undefined) {
-      const ev = val.events.gitBackup;
+    // backup 事件：onSuccess + onFailure
+    if (val.events.backup !== undefined) {
+      const ev = val.events.backup;
       if (!isValidEventObj(ev, ['onSuccess', 'onFailure'])) return false;
       if (ev.onSuccess !== undefined && typeof ev.onSuccess !== 'boolean') return false;
       if (ev.onFailure !== undefined && typeof ev.onFailure !== 'boolean') return false;
@@ -187,6 +187,7 @@ router.put(
     body('engine_display_count').optional().isInt({ min: 1, max: 10 }).withMessage('展示数量范围为 1-10'),
     body('theme_preset').optional().isString().isLength({ min: 3, max: 30 }).withMessage('配色预设标识长度需在 3-30 之间'),
     body('show_domain').optional().isInt({ min: 0, max: 1 }).withMessage('show_domain 只能为 0 或 1'),
+    body('no_image').optional().isInt({ min: 0, max: 1 }).withMessage('no_image 只能为 0 或 1'),
     body('view_mode').optional().isIn(['card', 'list', 'compact']).withMessage('view_mode 只能为 card、list 或 compact'),
     body('view_layout_enabled').optional().isInt({ min: 0, max: 1 }).withMessage('view_layout_enabled 只能为 0 或 1'),
     body('sort_enabled').optional().isInt({ min: 0, max: 1 }).withMessage('sort_enabled 只能为 0 或 1'),

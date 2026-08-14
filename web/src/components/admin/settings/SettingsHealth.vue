@@ -65,28 +65,36 @@ const patrolBusy = ref(false);
 const patrolProgress = ref(null); // { running, total, done, ok, blocked, fail, skip }
 let patrolTimer = null;
 
-/** 每 1.5s 轮询一次进度，结束后提示结果并复位 */
+/** 每 1.5s 轮询一次进度：单次失败不中断，任务结束后提示结果并复位 */
 function startPolling() {
   if (patrolTimer) return;
   patrolTimer = setInterval(async () => {
+    let data = null;
     try {
       const p = await linkApi.checkProgress();
-      patrolProgress.value = p.data;
-      if (!p.data.running) {
-        clearInterval(patrolTimer);
-        patrolTimer = null;
-        patrolBusy.value = false;
-        message.success(`巡检完成：正常 ${p.data.ok} · 需代理 ${p.data.blocked} · 打不开 ${p.data.fail} · 跳过 ${p.data.skip}`);
-      }
+      data = p.data;
     } catch {
-      clearInterval(patrolTimer);
-      patrolTimer = null;
-      patrolBusy.value = false;
+      // 单次请求失败（网络抖动/超时）不中断轮询，避免进度条永久消失，下次轮询自动恢复
+      return;
+    }
+    if (data?.running) {
+      patrolBusy.value = true;
+      patrolProgress.value = data;
+      return;
+    }
+    // 巡检结束：停止轮询，保留最终统计
+    clearInterval(patrolTimer);
+    patrolTimer = null;
+    patrolBusy.value = false;
+    const hadProgress = patrolProgress.value !== null;
+    patrolProgress.value = data;
+    if (hadProgress) {
+      message.success(`巡检完成：正常 ${data.ok} · 需代理 ${data.blocked} · 打不开 ${data.fail} · 跳过 ${data.skip}`);
     }
   }, 1500);
 }
 
-/** 页面挂载时恢复进行中的巡检进度（刷新后进度条不消失） */
+/** 页面挂载时恢复进行中的巡检进度（刷新后进度条不消失；查询失败用轮询兜底） */
 async function fetchPatrolStatus() {
   try {
     const p = await linkApi.checkProgress();
@@ -95,7 +103,10 @@ async function fetchPatrolStatus() {
       patrolProgress.value = p.data;
       startPolling();
     }
-  } catch { /* 未登录等场景静默 */ }
+  } catch {
+    // 恢复查询失败（瞬时网络问题等）：启动轮询兜底探测，探测到任务后自动恢复进度条
+    startPolling();
+  }
 }
 
 async function handlePatrolNow() {
@@ -138,20 +149,32 @@ onUnmounted(() => { if (patrolTimer) clearInterval(patrolTimer); });
     <p class="cfg-group-title">调度与判死</p>
     <div class="cfg-grid">
       <div class="cfg-item">
-        <span class="cfg-label">巡检开关</span>
-        <n-switch v-model:value="form.enabled" class="cfg-switch" />
+        <div class="cfg-head">
+          <span class="cfg-label">巡检开关</span>
+          <n-switch v-model:value="form.enabled" class="cfg-switch" />
+        </div>
+        <p class="cfg-hint">开启后按下方间隔自动巡检书签</p>
       </div>
       <div class="cfg-item">
-        <span class="cfg-label">巡检间隔</span>
-        <n-select v-model:value="form.intervalHours" :options="intervalOptions" size="small" class="cfg-control" />
+        <div class="cfg-head">
+          <span class="cfg-label">巡检间隔</span>
+          <n-select v-model:value="form.intervalHours" :options="intervalOptions" size="small" class="cfg-control" />
+        </div>
+        <p class="cfg-hint">每隔多久自动巡检一轮</p>
       </div>
       <div class="cfg-item">
-        <span class="cfg-label">每轮检测条数</span>
-        <n-input-number v-model:value="form.batchSize" :min="20" :max="500" size="small" class="cfg-control" />
+        <div class="cfg-head">
+          <span class="cfg-label">每轮检测条数</span>
+          <n-input-number v-model:value="form.batchSize" :min="20" :max="500" size="small" class="cfg-control" />
+        </div>
+        <p class="cfg-hint">每轮最多检测多少条（优先最久未检测）</p>
       </div>
       <div class="cfg-item">
-        <span class="cfg-label">连续失败判死（次）</span>
-        <n-input-number v-model:value="form.deadStreak" :min="2" :max="10" size="small" class="cfg-control" />
+        <div class="cfg-head">
+          <span class="cfg-label">连续失败判死（次）</span>
+          <n-input-number v-model:value="form.deadStreak" :min="2" :max="10" size="small" class="cfg-control" />
+        </div>
+        <p class="cfg-hint">连续失败达到该次数即标记为死链</p>
       </div>
     </div>
 
@@ -159,20 +182,32 @@ onUnmounted(() => { if (patrolTimer) clearInterval(patrolTimer); });
     <p class="cfg-group-title">策略与预警</p>
     <div class="cfg-grid">
       <div class="cfg-item">
-        <span class="cfg-label">死链重新纳入巡检</span>
-        <n-switch v-model:value="form.recheckDead" class="cfg-switch" />
+        <div class="cfg-head">
+          <span class="cfg-label">死链重新纳入巡检</span>
+          <n-switch v-model:value="form.recheckDead" class="cfg-switch" />
+        </div>
+        <p class="cfg-hint">开启后死链也会定期重新检测，有机会恢复</p>
       </div>
       <div class="cfg-item">
-        <span class="cfg-label">TLS 黄色预警（天）</span>
-        <n-input-number v-model:value="form.tlsYellowDays" :min="7" :max="90" size="small" class="cfg-control" />
+        <div class="cfg-head">
+          <span class="cfg-label">TLS 黄色预警（天）</span>
+          <n-input-number v-model:value="form.tlsYellowDays" :min="7" :max="90" size="small" class="cfg-control" />
+        </div>
+        <p class="cfg-hint">证书剩余有效期低于该天数时黄色预警</p>
       </div>
       <div class="cfg-item">
-        <span class="cfg-label">TLS 红色预警（天）</span>
-        <n-input-number v-model:value="form.tlsRedDays" :min="1" :max="30" size="small" class="cfg-control" />
+        <div class="cfg-head">
+          <span class="cfg-label">TLS 红色预警（天）</span>
+          <n-input-number v-model:value="form.tlsRedDays" :min="1" :max="30" size="small" class="cfg-control" />
+        </div>
+        <p class="cfg-hint">证书剩余有效期低于该天数时红色预警</p>
       </div>
       <div class="cfg-item">
-        <span class="cfg-label">冷链接判定（天）</span>
-        <n-input-number v-model:value="form.coldDays" :min="30" :max="365" size="small" class="cfg-control" />
+        <div class="cfg-head">
+          <span class="cfg-label">冷链接判定（天）</span>
+          <n-input-number v-model:value="form.coldDays" :min="30" :max="365" size="small" class="cfg-control" />
+        </div>
+        <p class="cfg-hint">长时间未访问（超过该天数）的链接视为冷链接</p>
       </div>
     </div>
 
@@ -238,8 +273,8 @@ onUnmounted(() => { if (patrolTimer) clearInterval(patrolTimer); });
 }
 .cfg-item {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: clamp(5px, 0.8vw, 8px);
   padding: clamp(8px, 1.2vw, 12px) clamp(10px, 1.4vw, 14px);
   border-radius: 12px;
   background: color-mix(in oklab, var(--admin-card) 55%, transparent);
@@ -249,13 +284,26 @@ onUnmounted(() => { if (patrolTimer) clearInterval(patrolTimer); });
   transform: translateY(-1px);
   box-shadow: 0 4px 14px -6px rgba(0, 0, 0, .18);
 }
+/* 配置项头部：标签 + 控件同行 */
+.cfg-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+/* 配置项说明：标签下方一行小字，帮助新用户理解 */
+.cfg-hint {
+  margin: 0;
+  font-size: clamp(10px, 1.2vw, 11px);
+  line-height: 1.5;
+  color: var(--admin-muted);
+}
 .cfg-label {
   flex-shrink: 0;
   width: clamp(90px, 11vw, 112px);
   font-size: clamp(11px, 1.4vw, 13px);
   font-weight: 500;
   color: var(--admin-text);
-  text-align: right;
   white-space: nowrap;
 }
 .cfg-control {

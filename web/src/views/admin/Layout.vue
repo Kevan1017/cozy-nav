@@ -72,6 +72,11 @@ const menuOptions = computed(() => [
     icon: renderIcon(() => h('span', { style: 'font-size:16px' }, '🔔')),
   },
   {
+    label: '操作日志',
+    key: '/admin/logs',
+    icon: renderIcon(() => h('span', { style: 'font-size:16px' }, '📋')),
+  },
+  {
     label: '网站设置',
     key: '/admin/settings',
     icon: renderIcon(() => h('span', { style: 'font-size:16px' }, '⚙️')),
@@ -329,9 +334,7 @@ body:has(#dm:checked) .mobile-title {
 .content-body {
   padding: clamp(16px, 3vw, 28px);
   min-height: 100%;
-  max-width: 1400px;
   width: 100%;
-  margin: 0 auto;
 }
 
 /* 菜单 n-menu 自带背景色与 themeOverrides 对齐，

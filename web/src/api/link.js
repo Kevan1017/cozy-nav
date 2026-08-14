@@ -9,6 +9,11 @@ export const linkApi = {
     return request.post('/links', data);
   },
 
+  /** 批量新建书签（items: [{ name, url, avatar_text, avatar_color }]） */
+  batchCreate(categoryId, items) {
+    return request.post('/links/batch', { category_id: categoryId, items });
+  },
+
   /** 编辑书签 */
   update(id, data) {
     return request.put(`/links/${id}`, data);
@@ -37,6 +42,11 @@ export const linkApi = {
   /** 置顶/取消置顶 */
   togglePin(id, pinned, order) {
     return request.put(`/links/${id}/pin`, { pinned, order });
+  },
+
+  /** 标记/取消标记常用书签 */
+  toggleFavorite(id, favorite) {
+    return request.put(`/links/${id}/favorite`, { favorite });
   },
 
   /** 切换书签锁定状态 */

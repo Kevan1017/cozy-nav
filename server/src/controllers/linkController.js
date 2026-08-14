@@ -26,6 +26,7 @@ import { isPublicHostname, classifyHostname } from '../utils/ssrfGuard.js';
 import { checkLinkHealth } from '../utils/linkHealth.js';
 import { startHealthBatch, getHealthBatchProgress, persistHealth } from '../utils/healthRunner.js';
 import { normalizeUrl } from '../utils/urlNormalize.js';
+import { writeLog, LOG_MODULE, LOG_ACTION } from '../utils/operationLogger.js';
 
 /**
  * 记录书签访问
@@ -72,7 +73,7 @@ function extractDomain(url) {
  * POST /api/links
  */
 export async function createLink(req, res) {
-  const { category_id, name, url, domain, avatar_text, avatar_color, sort_order, note, force, favicon_data_url } = req.body;
+  const { category_id, name, url, domain, avatar_text, avatar_color, sort_order, note, force, favicon_data_url, is_favorite } = req.body;
 
   // 校验分类是否存在
   const category = db.prepare('SELECT id FROM categories WHERE id = ? AND deleted_at IS NULL').get(category_id);
@@ -117,13 +118,21 @@ export async function createLink(req, res) {
   }
 
   const result = db.prepare(`
-    INSERT INTO links (category_id, name, url, domain, avatar_text, avatar_color, sort_order, note, url_normalized, favicon_path, favicon_status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(category_id, name, url, domain || extractDomain(url), avatar_text || null, avatar_color || null, nextSort, note || '', normalized, faviconPath, faviconPath ? 'ok' : null);
+    INSERT INTO links (category_id, name, url, domain, avatar_text, avatar_color, sort_order, note, url_normalized, favicon_path, favicon_status, is_favorite)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(category_id, name, url, domain || extractDomain(url), avatar_text || null, avatar_color || null, nextSort, note || '', normalized, faviconPath, faviconPath ? 'ok' : null, is_favorite ? 1 : 0);
 
   const newLink = db.prepare('SELECT * FROM links WHERE id = ?').get(result.lastInsertRowid);
 
   console.log(`[${new Date().toISOString()}] [书签] [新增] [成功] ${name}`);
+
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.CREATE,
+    detail: `新建书签：${name}`,
+    meta: { id: Number(result.lastInsertRowid), category_id, url },
+  }, req);
 
   // 未上传自定义图标时，异步抓取 favicon（不阻塞响应）
   if (!faviconPath) {
@@ -136,12 +145,83 @@ export async function createLink(req, res) {
 }
 
 /**
+ * 批量新建书签
+ * POST /api/links/batch
+ * 事务内逐条创建：URL 规范化判重（命中即跳过并记录原因，不返回 409 打断整批）；
+ * favicon 在事务提交后异步抓取，不阻塞响应
+ */
+export function batchCreateLinks(req, res) {
+  const { category_id, items } = req.body;
+
+  // 校验分类是否存在
+  const category = db.prepare('SELECT id FROM categories WHERE id = ? AND deleted_at IS NULL').get(category_id);
+  if (!category) {
+    return jsonError(res, '分类不存在');
+  }
+
+  // 预取该分类现有 URL 规范化值，避免循环内重复查询
+  const existing = new Set(
+    db.prepare('SELECT url_normalized FROM links WHERE category_id = ? AND deleted_at IS NULL')
+      .all(category_id)
+      .map(r => r.url_normalized)
+  );
+
+  const created = []; // { index, id, url } 本批成功创建
+  const skipped = []; // { index, name, url, reason } 被跳过的条目
+
+  db.exec('BEGIN');
+  try {
+    for (let i = 0; i < items.length; i++) {
+      const { name = '', url = '', avatar_text = null, avatar_color = null } = items[i] || {};
+      const normalized = normalizeUrl(url);
+      // 规范化失败或已存在（含本批新增）→ 跳过并记录原因
+      if (!normalized || existing.has(normalized)) {
+        skipped.push({ index: i + 1, name: name || url || `第${i + 1}条`, url, reason: normalized ? '已存在' : 'URL 无效' });
+        continue;
+      }
+      // 自动排到该分类末尾（分类内最大权重 + 1），避免新增书签权重相同
+      const nextSort = db.prepare(
+        'SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM links WHERE category_id = ? AND deleted_at IS NULL'
+      ).get(category_id).next;
+      const result = db.prepare(`
+        INSERT INTO links (category_id, name, url, domain, avatar_text, avatar_color, sort_order, note, url_normalized)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(category_id, name, url, extractDomain(url), avatar_text, avatar_color, nextSort, '', normalized);
+      existing.add(normalized);
+      created.push({ index: i + 1, id: Number(result.lastInsertRowid), url });
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    console.log(`[${new Date().toISOString()}] [书签] [批量新增] [失败] ${err.message}`);
+    return jsonError(res, '批量创建失败');
+  }
+
+  // favicon 异步抓取（不阻塞响应）
+  for (const c of created) {
+    setImmediate(() => {
+      fetchFaviconAsync(c.url, c.id).catch(() => {});
+    });
+  }
+
+  console.log(`[${new Date().toISOString()}] [书签] [批量新增] [成功] 新增 ${created.length} / 跳过 ${skipped.length}`);
+  // 操作日志：批量新建（带数量，异常大批量可事后追溯）
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.CREATE,
+    detail: `批量新建书签：成功 ${created.length} 个、跳过 ${skipped.length} 个`,
+    meta: { category_id, created: created.length, skipped: skipped.length },
+  }, req);
+  return jsonSuccess(res, { created: created.length, skipped }, '批量创建成功');
+}
+
+/**
  * 编辑书签
  * PUT /api/links/:id
  */
 export function updateLink(req, res) {
   const { id } = req.params;
-  const { category_id, name, url, domain, avatar_text, avatar_color, sort_order, note, force, favicon_path } = req.body;
+  const { category_id, name, url, domain, avatar_text, avatar_color, sort_order, note, force, favicon_path, is_favorite } = req.body;
 
   const existing = db.prepare('SELECT * FROM links WHERE id = ? AND deleted_at IS NULL').get(id);
   if (!existing) {
@@ -166,7 +246,7 @@ export function updateLink(req, res) {
 
   db.prepare(`
     UPDATE links
-    SET category_id = ?, name = ?, url = ?, domain = ?, avatar_text = ?, avatar_color = ?, sort_order = ?, note = ?, url_normalized = ?
+    SET category_id = ?, name = ?, url = ?, domain = ?, avatar_text = ?, avatar_color = ?, sort_order = ?, note = ?, url_normalized = ?, is_favorite = ?
     WHERE id = ?
   `).run(
     category_id ?? existing.category_id,
@@ -178,6 +258,7 @@ export function updateLink(req, res) {
     sort_order ?? existing.sort_order,
     note !== undefined ? note : existing.note,
     normalized,
+    is_favorite !== undefined ? (is_favorite ? 1 : 0) : existing.is_favorite,
     id
   );
 
@@ -198,6 +279,13 @@ export function updateLink(req, res) {
   const updated = db.prepare('SELECT * FROM links WHERE id = ?').get(id);
 
   console.log(`[${new Date().toISOString()}] [书签] [编辑] [成功] ${name || existing.name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.UPDATE,
+    detail: `编辑书签：${name || existing.name}`,
+    meta: { id: Number(id), category_id: category_id ?? existing.category_id, url: finalUrl },
+  }, req);
 
   return jsonSuccess(res, updated, '更新成功');
 }
@@ -217,6 +305,13 @@ export function deleteLink(req, res) {
   db.prepare('UPDATE links SET deleted_at = ? WHERE id = ?').run(new Date().toISOString(), id);
 
   console.log(`[${new Date().toISOString()}] [书签] [删除] [成功] ${existing.name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.DELETE,
+    detail: `删除书签：${existing.name}`,
+    meta: { id: Number(id), category_id: existing.category_id, url: existing.url },
+  }, req);
 
   return jsonSuccess(res, null, '删除成功');
 }
@@ -274,6 +369,13 @@ export function restoreLink(req, res) {
   db.prepare('UPDATE links SET deleted_at = NULL WHERE id = ?').run(id);
 
   console.log(`[${new Date().toISOString()}] [书签] [恢复] [成功] ${existing.name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.RESTORE,
+    detail: `恢复书签：${existing.name}`,
+    meta: { id: Number(id), category_id: existing.category_id },
+  }, req);
 
   return jsonSuccess(res, null, '已恢复');
 }
@@ -295,6 +397,13 @@ export function purgeLink(req, res) {
   db.prepare('DELETE FROM links WHERE id = ?').run(id);
 
   console.log(`[${new Date().toISOString()}] [书签] [彻底删除] [成功] ${existing.name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.DELETE,
+    detail: `彻底删除书签：${existing.name}`,
+    meta: { id: Number(id), category_id: existing.category_id },
+  }, req);
 
   return jsonSuccess(res, null, '已彻底删除');
 }
@@ -330,8 +439,46 @@ export function togglePin(req, res) {
   const updated = db.prepare('SELECT * FROM links WHERE id = ?').get(id);
 
   console.log(`[${new Date().toISOString()}] [书签] [置顶] [成功] ${existing.name} -> ${pinned ? '置顶' : '取消'}`);
+  // 操作日志：置顶/取消置顶留痕
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.TOGGLE,
+    detail: `${pinned ? '置顶' : '取消置顶'}书签：${existing.name}`,
+    meta: { id: Number(id), pinned: !!pinned, order: order ?? null },
+  }, req);
 
   return jsonSuccess(res, updated, pinned ? '置顶成功' : '取消置顶成功');
+}
+
+/**
+ * 标记/取消标记常用书签
+ * PUT /api/links/:id/favorite
+ * 独立于置顶：常用标记与置顶互不影响（关闭置顶板块不会自动取消常用标记）
+ */
+export function toggleFavorite(req, res) {
+  const { id } = req.params;
+  const { favorite } = req.body;
+
+  const existing = db.prepare('SELECT * FROM links WHERE id = ? AND deleted_at IS NULL').get(id);
+  if (!existing) {
+    return jsonError(res, '书签不存在');
+  }
+
+  const newFavorite = favorite ? 1 : 0;
+  db.prepare('UPDATE links SET is_favorite = ? WHERE id = ?').run(newFavorite, id);
+
+  const updated = db.prepare('SELECT * FROM links WHERE id = ?').get(id);
+
+  console.log(`[${new Date().toISOString()}] [书签] [常用标记] [成功] ${existing.name} -> ${favorite ? '标记常用' : '取消常用'}`);
+  // 操作日志：常用标记切换留痕
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.TOGGLE,
+    detail: `${favorite ? '标记常用' : '取消常用'}书签：${existing.name}`,
+    meta: { id: Number(id), favorite: !!favorite },
+  }, req);
+
+  return jsonSuccess(res, updated, favorite ? '已标记为常用' : '已取消常用标记');
 }
 
 /**
@@ -369,6 +516,13 @@ export function toggleLinkLock(req, res) {
   db.prepare('UPDATE admin SET lock_version = lock_version + 1 WHERE id = 1').run();
 
   console.log(`[${now}] [书签] [锁定] [成功] ${existing.name} -> ${locked ? '锁定' : '解锁'}`);
+  // 操作日志：锁定/解锁留痕（保险库敏感操作）
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.TOGGLE,
+    detail: `${locked ? '锁定' : '解锁'}书签：${existing.name}`,
+    meta: { id: Number(id), locked: !!locked },
+  }, req);
 
   return jsonSuccess(res, { id: Number(id), is_locked: newLocked }, locked ? '已加密' : '已解密');
 }
@@ -497,9 +651,9 @@ export async function fetchPageTitle(req, res) {
         return jsonError(res, '该地址不允许访问（内网地址）');
       }
 
-      // 请求页面 HTML，超时 5 秒
+      // 请求页面 HTML，超时 10 秒（与前端 axios 超时对齐，避免前端先断导致提示不一致；原 5 秒过短，部分国内站点响应较慢会误报失败）
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
+      const timeout = setTimeout(() => controller.abort(), 10000);
 
       let response;
       try {
@@ -583,7 +737,10 @@ export async function fetchPageTitle(req, res) {
   } catch (err) {
     const reason = err.name === 'AbortError' ? '请求超时' : err.message;
     console.log(`[${new Date().toISOString()}] [书签] [获取标题] [失败] ${url} ${reason}`);
-    // 不向客户端泄露内部错误细节，仅输出到日志
+    // 超时是国内网络常见情况（站点被墙/响应慢），给出明确提示；其他错误不泄露内部细节
+    if (err.name === 'AbortError') {
+      return jsonError(res, '站点响应超时，可能被墙或访问过慢');
+    }
     return jsonError(res, '获取标题失败，请稍后重试');
   }
 }
@@ -639,8 +796,22 @@ export async function checkAllLinks(req, res) {
 
   const { started } = startHealthBatch(links, { logTag: '批量检测', triggerType: 'manual' });
   if (!started) {
+    // 操作日志：重复触发留痕（排查并发调用）
+    writeLog({
+      module: LOG_MODULE.PATROL,
+      action: LOG_ACTION.CHECK,
+      detail: '立即巡检/批量检测未启动：已有任务进行中',
+      meta: { ok: false, reason: 'busy' },
+    }, req);
     return jsonError(res, '已有批量检测任务进行中');
   }
+  // 操作日志：全量巡检触发留痕（含触发条数）
+  writeLog({
+    module: LOG_MODULE.PATROL,
+    action: LOG_ACTION.CHECK,
+    detail: `立即巡检启动：共 ${links.length} 条链接`,
+    meta: { total: links.length, ok: true },
+  }, req);
   return jsonSuccess(res, { total: links.length, started: true }, `批量检测已启动，共 ${links.length} 条`);
 }
 
@@ -700,6 +871,13 @@ export async function batchCheckLinks(req, res) {
   if (!started) {
     return jsonError(res, '已有检测任务进行中，请稍后再试');
   }
+  // 操作日志：批量重检触发留痕
+  writeLog({
+    module: LOG_MODULE.PATROL,
+    action: LOG_ACTION.CHECK,
+    detail: `批量重检启动：${links.length} 条链接`,
+    meta: { total: links.length, ok: true },
+  }, req);
   return jsonSuccess(res, { total: links.length, started: true }, `已启动对 ${links.length} 条链接的重新检测`);
 }
 
@@ -714,6 +892,13 @@ export function resetHealthBatch(req, res) {
     `UPDATE links SET health_status = NULL, fail_streak = 0, last_check_at = NULL
      WHERE deleted_at IS NULL AND id IN (${placeholders})`
   ).run(...ids);
+  // 操作日志：批量重置健康状态留痕
+  writeLog({
+    module: LOG_MODULE.PATROL,
+    action: LOG_ACTION.CHECK,
+    detail: `批量重置健康状态：${changes} 条链接`,
+    meta: { reset: changes },
+  }, req);
   return jsonSuccess(res, { reset: changes }, `已重置 ${changes} 条链接的检测状态`);
 }
 
@@ -737,6 +922,13 @@ export function batchMoveLinks(req, res) {
   ).run(category_id, ...ids);
 
   console.log(`[${new Date().toISOString()}] [书签] [批量移动] [成功] ${changes} 条 → ${cat.name}`);
+  // 操作日志：批量移动（数据迁移操作）留痕
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.MOVE,
+    detail: `批量移动 ${changes} 个书签到「${cat.name}」`,
+    meta: { moved: changes, category_id: Number(category_id), category_name: cat.name },
+  }, req);
   return jsonSuccess(res, { moved: changes }, `已移动 ${changes} 个书签到「${cat.name}」`);
 }
 

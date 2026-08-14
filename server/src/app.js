@@ -12,6 +12,7 @@ import engineRoutes from './routes/engines.js';
 import importExportRoutes from './routes/importExport.js';
 import backupRoutes from './routes/backup.js';
 import changelogRoutes from './routes/changelog.js';
+import operationLogRoutes from './routes/operationLogs.js';
 import { cleanExpiredFailedRecords, FAVICON_DIR } from './utils/faviconFetcher.js';
 import { startHealthPatrol, startDailyBackup } from './utils/scheduler.js';
 import { LOGO_DIR } from './controllers/prefsController.js';
@@ -185,6 +186,7 @@ app.use('/api/favicon', faviconRouter);
 app.use('/api', importExportRoutes);
 app.use('/api/backup', backupRoutes);
 app.use('/api/changelog', changelogRoutes);
+app.use('/api/operation-logs', operationLogRoutes);
 
 // 全局 404 兜底：对 /api 路径返回统一 JSON（避免命中 Express 默认 404 HTML）
 app.use('/api', (req, res) => {
@@ -201,7 +203,7 @@ setInterval(cleanExpiredFailedRecords, 24 * 60 * 60 * 1000);
 // 启动链接健康定时巡检（配置在 preferences.health_config，每轮结束后动态重排）
 startHealthPatrol();
 
-// 启动每日自动备份（配置在 preferences.backup_config，每天 03:00 本地快照 + Git 异地）
+// 启动每日自动备份（配置在 preferences.backup_config，每天 03:00 本地快照，数据无变化自动跳过）
 startDailyBackup();
 
 // 启动服务

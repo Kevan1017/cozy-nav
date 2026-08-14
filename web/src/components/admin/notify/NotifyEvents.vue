@@ -2,7 +2,7 @@
 /**
  * 通知中心 - 推送事件卡片（events："什么时候发、发什么"，可扩展）
  * - 巡检结果：策略（仅异常/总是）+ 异常阈值 + 消息模板
- * - Git 备份结果：成功/失败开关 + 消息模板
+ * - 本地备份结果：成功/失败开关 + 消息模板
  * 未来新增事件：后端加默认配置 + 渲染器，前端此处加一个事件区块即可。
  * 配置通过 v-model:events 与父级同步，点保存整包提交。
  */
@@ -24,12 +24,12 @@ const EVENT_DEFAULTS = {
     titleTemplate: '🩺 巡检发现 {issues} 条异常',
     bodyTemplate: '正常 {ok} · 需代理 {blocked} · 打不开 {fail} · 跳过 {skip}\n\n检测时间：{time}',
   },
-  gitBackup: {
+  backup: {
     enabled: false,
     onSuccess: true,        // 备份成功时推送
     onFailure: true,        // 备份失败时推送
     titleTemplate: '🛡️ 数据备份{result}',
-    bodyTemplate: '文件：{file}\n大小：{size}\n{reason}时间：{time}',
+    bodyTemplate: '文件：{file}\n大小：{size}\n{reason}时间：{time}\n坚果云：{webdav}',
   },
 };
 
@@ -44,8 +44,9 @@ const PLACEHOLDERS = {
     { key: '{issues}', desc: '异常数（同 fail）' },
     { key: '{time}', desc: '推送时间' },
   ],
-  gitBackup: [
-    { key: '{result}', desc: '备份结果（成功/失败）' },
+  backup: [
+    { key: '{result}', desc: '本地备份结果（成功/失败）' },
+    { key: '{webdav}', desc: '坚果云上传结果（成功/失败（原因）/未启用）' },
     { key: '{file}', desc: '快照文件名' },
     { key: '{size}', desc: '快照大小' },
     { key: '{reason}', desc: '失败原因（成功时为空）' },
@@ -63,7 +64,7 @@ const strategyOptions = [
 function fillDefaults(src) {
   return {
     patrol: { ...EVENT_DEFAULTS.patrol, ...(src?.patrol || {}) },
-    gitBackup: { ...EVENT_DEFAULTS.gitBackup, ...(src?.gitBackup || {}) },
+    backup: { ...EVENT_DEFAULTS.backup, ...(src?.backup || {}) },
   };
 }
 
@@ -80,7 +81,7 @@ watch(
 function sync() {
   emit('update:events', {
     patrol: { ...local.value.patrol },
-    gitBackup: { ...local.value.gitBackup },
+    backup: { ...local.value.backup },
   });
 }
 </script>
@@ -148,27 +149,27 @@ function sync() {
       </template>
     </div>
 
-    <!-- 事件二：Git 备份结果 -->
+    <!-- 事件二：本地备份结果 -->
     <div class="event-block">
       <div class="channel-head">
-        <span class="channel-title">🛡️ Git 备份结果</span>
-        <n-switch v-model:value="local.gitBackup.enabled" size="small" @update:value="sync" />
+        <span class="channel-title">🛡️ 本地备份结果</span>
+        <n-switch v-model:value="local.backup.enabled" size="small" @update:value="sync" />
       </div>
-      <template v-if="local.gitBackup.enabled">
+      <template v-if="local.backup.enabled">
         <div class="notify-row">
           <span class="notify-label">成功时推送</span>
-          <n-switch v-model:value="local.gitBackup.onSuccess" size="small" @update:value="sync" />
-          <span class="notify-state">{{ local.gitBackup.onSuccess ? '开启' : '关闭' }}</span>
+          <n-switch v-model:value="local.backup.onSuccess" size="small" @update:value="sync" />
+          <span class="notify-state">{{ local.backup.onSuccess ? '开启' : '关闭' }}</span>
         </div>
         <div class="notify-row">
           <span class="notify-label">失败时推送</span>
-          <n-switch v-model:value="local.gitBackup.onFailure" size="small" @update:value="sync" />
-          <span class="notify-state">{{ local.gitBackup.onFailure ? '开启' : '关闭' }}</span>
+          <n-switch v-model:value="local.backup.onFailure" size="small" @update:value="sync" />
+          <span class="notify-state">{{ local.backup.onFailure ? '开启' : '关闭' }}</span>
         </div>
         <div class="notify-row">
           <span class="notify-label">消息标题</span>
           <n-input
-            v-model:value="local.gitBackup.titleTemplate"
+            v-model:value="local.backup.titleTemplate"
             placeholder="🛡️ 数据备份{result}"
             class="notify-control"
             maxlength="200"
@@ -178,10 +179,10 @@ function sync() {
         <div class="notify-row">
           <span class="notify-label">消息正文</span>
           <n-input
-            v-model:value="local.gitBackup.bodyTemplate"
+            v-model:value="local.backup.bodyTemplate"
             type="textarea"
             :rows="3"
-            placeholder="文件：{file}&#10;大小：{size}&#10;{reason}时间：{time}"
+            placeholder="文件：{file}&#10;大小：{size}&#10;{reason}时间：{time}&#10;坚果云：{webdav}"
             class="notify-control"
             maxlength="1000"
             show-count
@@ -189,7 +190,7 @@ function sync() {
           />
         </div>
         <div class="ph-list">
-          <span v-for="p in PLACEHOLDERS.gitBackup" :key="p.key" class="ph-tag">{{ p.key }} {{ p.desc }}</span>
+          <span v-for="p in PLACEHOLDERS.backup" :key="p.key" class="ph-tag">{{ p.key }} {{ p.desc }}</span>
         </div>
       </template>
     </div>
