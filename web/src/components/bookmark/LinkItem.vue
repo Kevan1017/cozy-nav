@@ -4,6 +4,7 @@
  * 支持加密状态：锁定时显示锁图标，点击触发解锁
  * 头像优先显示 favicon，加载失败回退字母头像
  * 闲置标记：开启开关且超过 30 天未访问时，右上角显示时钟角标，悬停提示天数
+ * 常用标记：开关开启且链接标记为常用时，名称末尾内联金色小星（所有视图模式统一）
  */
 import { computed } from 'vue';
 import FaviconImage from '../ui/FaviconImage.vue';
@@ -60,15 +61,6 @@ function handleOpen() {
 
   <!-- 正常书签 -->
   <div v-else class="lk" :title="showIdle ? idleTip : undefined" @click="handleOpen">
-    <span v-if="showFav" class="fav-star" title="常用书签">
-      <svg
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        aria-hidden="true"
-      >
-        <path d="M12 2l2.9 6.6 7.1.7-5.4 4.8 1.6 7-6.2-3.6-6.2 3.6 1.6-7L2 9.3l7.1-.7z" />
-      </svg>
-    </span>
     <span v-if="showIdle" class="idle-clock" :title="idleTip">
       <svg
         viewBox="0 0 24 24"
@@ -106,7 +98,18 @@ function handleOpen() {
       }"
     >{{ link.avatar_text }}</div>
     <div class="txt">
-      <div class="nm">{{ link.name }}</div>
+      <div class="nm">
+        <span class="nm-text">{{ link.name }}</span>
+        <span v-if="showFav" class="fav-star" title="常用书签">
+          <svg
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M12 2l2.9 6.6 7.1.7-5.4 4.8 1.6 7-6.2-3.6-6.2 3.6 1.6-7L2 9.3l7.1-.7z" />
+          </svg>
+        </span>
+      </div>
       <div v-if="prefsStore.showDomain" class="dm">{{ link.domain }}</div>
     </div>
   </div>
@@ -170,9 +173,32 @@ function handleOpen() {
   color: var(--link-name, var(--ink));
   /* 1.1 太紧会裁掉黑体/宋体下 g 等字母的下伸部 */
   line-height: 1.35;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 名称文本：超长省略，为内联星标留出独立位置（不覆盖文本） */
+.nm-text {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 常用书签星标：名称末尾内联小星（文本流内占位，不遮挡任何文字） */
+.fav-star {
+  flex: none;
+  display: inline-flex;
+  width: 13px;
+  height: 13px;
+  color: var(--link-fav);
+}
+
+.fav-star svg {
+  width: 100%;
+  height: 100%;
 }
 
 .dm {
@@ -210,34 +236,6 @@ function handleOpen() {
 .idle-clock svg {
   width: 12px;
   height: 12px;
-}
-
-/* 常用书签星标角标：右上角金色实心星，与闲置时钟同显时时钟右移避免重叠 */
-.fav-star {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 2;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--link-fav);
-  background: color-mix(in oklab, var(--link-fav) 18%, transparent);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
-  pointer-events: none;
-}
-
-.fav-star svg {
-  width: 13px;
-  height: 13px;
-}
-
-/* 星标与闲置时钟同时显示时，闲置时钟右移一档 */
-.lk:has(.fav-star) .idle-clock {
-  right: 30px;
 }
 
 /* 头像基础样式（字母头像与 FaviconImage 的 .favicon-img 视觉一致） */
