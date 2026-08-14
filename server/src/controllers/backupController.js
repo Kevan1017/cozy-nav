@@ -10,6 +10,7 @@ import { jsonSuccess, jsonError } from '../utils/response.js';
 import { listBackups, parseBackupConfig, DEFAULT_BACKUP_CONFIG, DATA_DIR, formatBackupTime } from '../utils/backup.js';
 import { triggerBackupNow } from '../utils/scheduler.js';
 import { testWebDAVConnection, listWebdavBackups } from '../utils/webdavBackup.js';
+import { writeLog, LOG_MODULE, LOG_ACTION } from '../utils/operationLogger.js';
 
 /**
  * 读取备份配置
@@ -50,6 +51,13 @@ export function updateBackupConfig(req, res) {
     `autoEnabled=${next.autoEnabled} retainCount=${next.retainCount} ` +
     `webdav=${next.webdav?.enabled ? '启用' : '关闭'}`
   );
+  // 操作日志：备份配置变更（含云端启停）留痕
+  writeLog({
+    module: LOG_MODULE.BACKUP,
+    action: LOG_ACTION.UPDATE,
+    detail: `保存备份配置：自动备份${next.autoEnabled ? '开启' : '关闭'}、保留 ${next.retainCount} 份、坚果云${next.webdav?.enabled ? '启用' : '关闭'}`,
+    meta: { autoEnabled: next.autoEnabled, retainCount: next.retainCount, webdavEnabled: !!next.webdav?.enabled },
+  }, req);
 
   return jsonSuccess(res, { ...next }, '备份配置已保存');
 }
@@ -60,6 +68,23 @@ export function updateBackupConfig(req, res) {
  */
 export async function runBackupNow(req, res) {
   const result = await triggerBackupNow();
+  // 操作日志：手动备份成败（含云端上传结果）留痕
+  const detail = result.skipped
+    ? `立即备份跳过：${result.reason}`
+    : result.ok
+      ? (result.webdav?.ok ? '立即备份完成（已上传坚果云）' : (result.webdav ? '立即备份完成（坚果云上传失败）' : '立即备份完成'))
+      : `立即备份失败：${result.reason || '未知错误'}`;
+  writeLog({
+    module: LOG_MODULE.BACKUP,
+    action: LOG_ACTION.RUN,
+    detail,
+    meta: {
+      file: result.file || null,
+      size: result.size || null,
+      skipped: !!result.skipped,
+      webdav: result.webdav ? { ok: !!result.webdav.ok, reason: result.webdav.reason || null } : null,
+    },
+  }, req);
   if (result.skipped) {
     return jsonSuccess(res, { skipped: true, reason: result.reason }, result.reason);
   }
@@ -89,6 +114,13 @@ export async function runBackupNow(req, res) {
 export async function testWebdav(req, res) {
   const { url, user, pass, path } = req.body?.webdav || {};
   const result = await testWebDAVConnection({ url, user, pass, path });
+  // 操作日志：WebDAV 连接测试留痕（含失败原因，便于排查云端配置问题）
+  writeLog({
+    module: LOG_MODULE.BACKUP,
+    action: LOG_ACTION.CHECK,
+    detail: result.ok ? '测试坚果云连接成功' : `测试坚果云连接失败：${result.reason || '未知原因'}`,
+    meta: { ok: !!result.ok, reason: result.reason || null },
+  }, req);
   if (result.ok) {
     return jsonSuccess(res, {}, '坚果云连接成功，可正常备份');
   }

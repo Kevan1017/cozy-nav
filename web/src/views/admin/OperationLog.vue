@@ -23,6 +23,8 @@ const MODULES = [
   { label: '🔎 搜索引擎', value: 'engine', color: 'primary' },
   { label: '📤 导入导出', value: 'import', color: 'error' },
   { label: '🛡️ 保险库', value: 'vault', color: 'error' },
+  { label: '💾 备份', value: 'backup', color: 'primary' },
+  { label: '🩺 巡检', value: 'patrol', color: 'warning' },
   { label: '⚙️ 设置', value: 'setting', color: 'default' },
 ];
 const MODULE_COLOR = Object.fromEntries(MODULES.filter((m) => m.value).map((m) => [m.value, m.color]));

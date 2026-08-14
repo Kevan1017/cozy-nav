@@ -25,6 +25,13 @@ export async function login(req, res) {
   }
 
   if (admin.username !== username) {
+    // 操作日志：登录失败留痕（未认证 operator 为空，仅记来源 IP，防爆破/异常登录可追溯）
+    writeLog({
+      module: LOG_MODULE.AUTH,
+      action: LOG_ACTION.LOGIN,
+      detail: `管理员登录失败：${username}（账号不存在）`,
+      meta: { username, ok: false, reason: 'not_found' },
+    }, req);
     // 与其他网站一致：登录失败返回 HTTP 200 + 业务码（body.code），
     // 避免浏览器控制台自动打印接口信息（状态码/URL）
     return res.status(200).json({ code: 401, message: '用户名或密码错误', data: null });
@@ -33,6 +40,13 @@ export async function login(req, res) {
   // bcrypt 异步比较，避免同步哈希阻塞事件循环
   const passwordOk = await bcrypt.compare(password, admin.password);
   if (!passwordOk) {
+    // 操作日志：密码错误留痕
+    writeLog({
+      module: LOG_MODULE.AUTH,
+      action: LOG_ACTION.LOGIN,
+      detail: `管理员登录失败：${username}（密码错误）`,
+      meta: { username, ok: false, reason: 'bad_password' },
+    }, req);
     return res.status(200).json({ code: 401, message: '用户名或密码错误', data: null });
   }
 
@@ -294,6 +308,13 @@ export async function unlockVault(req, res) {
   // bcrypt 异步比较
   const passwordOk = await bcrypt.compare(password, admin.vault_password_hash);
   if (!passwordOk) {
+    // 操作日志：保险库解锁失败留痕（连续失败可追溯暴力尝试，配合限流）
+    writeLog({
+      module: LOG_MODULE.VAULT,
+      action: LOG_ACTION.UNLOCK,
+      detail: '保险库解锁失败（密码错误）',
+      meta: { ok: false, reason: 'bad_password' },
+    }, req);
     return jsonError(res, '保险库密码错误');
   }
 
@@ -319,6 +340,13 @@ export async function unlockVault(req, res) {
 
   const now = new Date().toISOString();
   console.log(`[${now}] [保险库] [解锁] [成功] ${req.admin.username} (lockVersion=${admin.lock_version || 0})`);
+  // 操作日志：保险库解锁成功留痕
+  writeLog({
+    module: LOG_MODULE.VAULT,
+    action: LOG_ACTION.UNLOCK,
+    detail: '保险库解锁成功',
+    meta: { ok: true },
+  }, req);
 
   return jsonSuccess(res, {
     accessToken,

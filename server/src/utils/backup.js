@@ -26,14 +26,18 @@ export const BACKUP_DIR = join(DATA_DIR, 'backups');
 /** 需要排除的子目录（.failed 为 favicon 抓取失败缓存，可重建） */
 const EXCLUDE_DIRS = ['.failed'];
 
-/** 数据指纹计算时排除的条目（备份产物/临时缓存/自身指纹文件，不计入"数据变化"） */
+/** 数据指纹计算时排除的条目（备份产物/可再生缓存/自身指纹文件，不计入"数据变化"） */
 const HASH_EXCLUDE = new Set([
   'backups',          // 历史备份快照
   '.git',             // data 目录若曾初始化 git 仓库
   '.failed',          // favicon 失败缓存
+  'favicons',         // favicon 图标缓存（可再生，不构成数据变化，避免访问新站点即触发备份）
   'backup-hash.json', // 上次备份指纹文件自身（内容含时间戳，必须排除）
-  'cozy-nav.db-journal', 'cozy-nav.db-wal', 'cozy-nav.db-shm', // SQLite 临时文件
+  'cozy-nav.db', 'cozy-nav.db-journal', 'cozy-nav.db-wal', 'cozy-nav.db-shm', // 数据库文件与临时文件（内容由核心表指纹覆盖）
 ]);
+
+/** 指纹参与的业务核心表（排除运行痕迹表 operation_logs/patrol_reports/visit_logs，避免高频写入破坏增量判断） */
+const CORE_TABLES = ['admin', 'categories', 'links', 'search_engines', 'preferences', 'changelog'];
 
 /** 上次备份指纹存储文件 */
 const HASH_FILE = join(DATA_DIR, 'backup-hash.json');
@@ -111,13 +115,21 @@ function dirSize(dir) {
 
 /**
  * 计算数据指纹（增量判断依据）
- * 对 DATA_DIR 内所有有效文件递归计算 SHA-256（文件名 + 大小 + 修改时间 + 内容），
- * 排除备份产物/缓存/临时文件。数据零变化时两次指纹一致 → 跳过备份。
+ * 只统计"业务核心数据"：核心表内容（admin/categories/links/search_engines/preferences/changelog）+ 站点 Logo 等用户文件。
+ * 运行痕迹（操作日志/巡检报告/访问统计）与可再生缓存（favicons）不计入，
+ * 避免它们的高频写入让指纹每次变化、导致增量备份形同虚设。
  * @returns {string|null} 指纹 hex；计算失败返回 null（调用方按"有变化"处理，保证不漏备）
  */
 export function computeDataHash() {
   try {
     const hash = createHash('sha256');
+    // 1. 业务核心表内容（SELECT * 顺序稳定；含软删除行，与备份快照范围一致）
+    for (const t of CORE_TABLES) {
+      const rows = db.prepare(`SELECT * FROM ${t}`).all();
+      hash.update(t);
+      hash.update(JSON.stringify(rows));
+    }
+    // 2. DATA_DIR 下非 DB 用户文件（站点 Logo 等；favicons/数据库文件已在排除集）
     const walk = (dir, rel) => {
       for (const entry of readdirSync(dir).sort()) {
         if (HASH_EXCLUDE.has(entry)) continue;

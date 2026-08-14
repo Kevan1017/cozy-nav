@@ -380,6 +380,13 @@ export function toggleCategoryLock(req, res) {
   db.prepare('UPDATE admin SET lock_version = lock_version + 1 WHERE id = 1').run();
 
   console.log(`[${now}] [分类] [锁定] [成功] ${existing.name} -> ${locked ? '锁定' : '解锁'}`);
+  // 操作日志：分类锁定/解锁留痕（保险库敏感操作）
+  writeLog({
+    module: LOG_MODULE.CATEGORY,
+    action: LOG_ACTION.TOGGLE,
+    detail: `${locked ? '锁定' : '解锁'}分类：${existing.name}`,
+    meta: { id: Number(id), locked: !!locked },
+  }, req);
 
   return jsonSuccess(res, { id: Number(id), is_locked: newLocked }, locked ? '已加密' : '已解密');
 }

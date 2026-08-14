@@ -49,6 +49,14 @@ export function exportJSON(req, res) {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="cozy-nav-export.json"');
     res.send(JSON.stringify(result, null, 2));
+    // 操作日志：导出为敏感操作，留痕便于事后追溯数据外流
+    const linkCount = result.categories.reduce((sum, c) => sum + c.links.length, 0);
+    writeLog({
+      module: LOG_MODULE.IMPORT,
+      action: LOG_ACTION.EXPORT,
+      detail: `导出书签数据（JSON）：${result.categories.length} 个分类、${linkCount} 个书签`,
+      meta: { format: 'json', categories: result.categories.length, links: linkCount },
+    }, req);
   } catch (e) {
     // 不向客户端泄露内部错误细节，仅输出到日志
     console.log(`[${new Date().toISOString()}] [导出] [JSON] [失败] ${e.message}`);
@@ -99,6 +107,13 @@ export function exportBookmarks(req, res) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="cozy-nav-bookmarks.html"');
     res.send(html);
+    // 操作日志：导出为敏感操作，留痕便于事后追溯数据外流
+    writeLog({
+      module: LOG_MODULE.IMPORT,
+      action: LOG_ACTION.EXPORT,
+      detail: `导出书签数据（HTML）：${categories.length} 个分类`,
+      meta: { format: 'html', categories: categories.length },
+    }, req);
   } catch (e) {
     // 不向客户端泄露内部错误细节，仅输出到日志
     console.log(`[${new Date().toISOString()}] [导出] [HTML] [失败] ${e.message}`);

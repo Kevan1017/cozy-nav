@@ -439,6 +439,13 @@ export function togglePin(req, res) {
   const updated = db.prepare('SELECT * FROM links WHERE id = ?').get(id);
 
   console.log(`[${new Date().toISOString()}] [书签] [置顶] [成功] ${existing.name} -> ${pinned ? '置顶' : '取消'}`);
+  // 操作日志：置顶/取消置顶留痕
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.TOGGLE,
+    detail: `${pinned ? '置顶' : '取消置顶'}书签：${existing.name}`,
+    meta: { id: Number(id), pinned: !!pinned, order: order ?? null },
+  }, req);
 
   return jsonSuccess(res, updated, pinned ? '置顶成功' : '取消置顶成功');
 }
@@ -463,6 +470,13 @@ export function toggleFavorite(req, res) {
   const updated = db.prepare('SELECT * FROM links WHERE id = ?').get(id);
 
   console.log(`[${new Date().toISOString()}] [书签] [常用标记] [成功] ${existing.name} -> ${favorite ? '标记常用' : '取消常用'}`);
+  // 操作日志：常用标记切换留痕
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.TOGGLE,
+    detail: `${favorite ? '标记常用' : '取消常用'}书签：${existing.name}`,
+    meta: { id: Number(id), favorite: !!favorite },
+  }, req);
 
   return jsonSuccess(res, updated, favorite ? '已标记为常用' : '已取消常用标记');
 }
@@ -502,6 +516,13 @@ export function toggleLinkLock(req, res) {
   db.prepare('UPDATE admin SET lock_version = lock_version + 1 WHERE id = 1').run();
 
   console.log(`[${now}] [书签] [锁定] [成功] ${existing.name} -> ${locked ? '锁定' : '解锁'}`);
+  // 操作日志：锁定/解锁留痕（保险库敏感操作）
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.TOGGLE,
+    detail: `${locked ? '锁定' : '解锁'}书签：${existing.name}`,
+    meta: { id: Number(id), locked: !!locked },
+  }, req);
 
   return jsonSuccess(res, { id: Number(id), is_locked: newLocked }, locked ? '已加密' : '已解密');
 }
@@ -775,8 +796,22 @@ export async function checkAllLinks(req, res) {
 
   const { started } = startHealthBatch(links, { logTag: '批量检测', triggerType: 'manual' });
   if (!started) {
+    // 操作日志：重复触发留痕（排查并发调用）
+    writeLog({
+      module: LOG_MODULE.PATROL,
+      action: LOG_ACTION.CHECK,
+      detail: '立即巡检/批量检测未启动：已有任务进行中',
+      meta: { ok: false, reason: 'busy' },
+    }, req);
     return jsonError(res, '已有批量检测任务进行中');
   }
+  // 操作日志：全量巡检触发留痕（含触发条数）
+  writeLog({
+    module: LOG_MODULE.PATROL,
+    action: LOG_ACTION.CHECK,
+    detail: `立即巡检启动：共 ${links.length} 条链接`,
+    meta: { total: links.length, ok: true },
+  }, req);
   return jsonSuccess(res, { total: links.length, started: true }, `批量检测已启动，共 ${links.length} 条`);
 }
 
@@ -836,6 +871,13 @@ export async function batchCheckLinks(req, res) {
   if (!started) {
     return jsonError(res, '已有检测任务进行中，请稍后再试');
   }
+  // 操作日志：批量重检触发留痕
+  writeLog({
+    module: LOG_MODULE.PATROL,
+    action: LOG_ACTION.CHECK,
+    detail: `批量重检启动：${links.length} 条链接`,
+    meta: { total: links.length, ok: true },
+  }, req);
   return jsonSuccess(res, { total: links.length, started: true }, `已启动对 ${links.length} 条链接的重新检测`);
 }
 
@@ -850,6 +892,13 @@ export function resetHealthBatch(req, res) {
     `UPDATE links SET health_status = NULL, fail_streak = 0, last_check_at = NULL
      WHERE deleted_at IS NULL AND id IN (${placeholders})`
   ).run(...ids);
+  // 操作日志：批量重置健康状态留痕
+  writeLog({
+    module: LOG_MODULE.PATROL,
+    action: LOG_ACTION.CHECK,
+    detail: `批量重置健康状态：${changes} 条链接`,
+    meta: { reset: changes },
+  }, req);
   return jsonSuccess(res, { reset: changes }, `已重置 ${changes} 条链接的检测状态`);
 }
 
@@ -873,6 +922,13 @@ export function batchMoveLinks(req, res) {
   ).run(category_id, ...ids);
 
   console.log(`[${new Date().toISOString()}] [书签] [批量移动] [成功] ${changes} 条 → ${cat.name}`);
+  // 操作日志：批量移动（数据迁移操作）留痕
+  writeLog({
+    module: LOG_MODULE.LINK,
+    action: LOG_ACTION.MOVE,
+    detail: `批量移动 ${changes} 个书签到「${cat.name}」`,
+    meta: { moved: changes, category_id: Number(category_id), category_name: cat.name },
+  }, req);
   return jsonSuccess(res, { moved: changes }, `已移动 ${changes} 个书签到「${cat.name}」`);
 }
 

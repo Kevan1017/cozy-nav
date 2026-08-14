@@ -18,6 +18,8 @@ export const LOG_MODULE = {
   IMPORT: 'import',    // 导入/导出
   SETTING: 'setting',  // 后台设置
   VAULT: 'vault',      // 保险库
+  BACKUP: 'backup',    // 备份/WebDAV
+  PATROL: 'patrol',    // 巡检/批量检测
 };
 
 // 动作常量
@@ -31,6 +33,11 @@ export const LOG_ACTION = {
   EXPORT: 'export',
   CLEAR: 'clear',
   TOGGLE: 'toggle',
+  RUN: 'run',          // 执行（立即备份/立即巡检）
+  UNLOCK: 'unlock',    // 保险库解锁
+  MOVE: 'move',        // 批量移动
+  CHECK: 'check',      // 批量检测/重检/重置
+  SEND: 'send',        // 通知测试发送
 };
 
 // 兼容别名导出（业务代码用 logOperation 更直观）

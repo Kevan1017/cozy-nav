@@ -29,7 +29,7 @@ const EVENT_DEFAULTS = {
     onSuccess: true,        // 备份成功时推送
     onFailure: true,        // 备份失败时推送
     titleTemplate: '🛡️ 数据备份{result}',
-    bodyTemplate: '文件：{file}\n大小：{size}\n{reason}时间：{time}',
+    bodyTemplate: '文件：{file}\n大小：{size}\n{reason}时间：{time}\n坚果云：{webdav}',
   },
 };
 
@@ -45,7 +45,8 @@ const PLACEHOLDERS = {
     { key: '{time}', desc: '推送时间' },
   ],
   backup: [
-    { key: '{result}', desc: '备份结果（成功/失败）' },
+    { key: '{result}', desc: '本地备份结果（成功/失败）' },
+    { key: '{webdav}', desc: '坚果云上传结果（成功/失败（原因）/未启用）' },
     { key: '{file}', desc: '快照文件名' },
     { key: '{size}', desc: '快照大小' },
     { key: '{reason}', desc: '失败原因（成功时为空）' },
@@ -181,7 +182,7 @@ function sync() {
             v-model:value="local.backup.bodyTemplate"
             type="textarea"
             :rows="3"
-            placeholder="文件：{file}&#10;大小：{size}&#10;{reason}时间：{time}"
+            placeholder="文件：{file}&#10;大小：{size}&#10;{reason}时间：{time}&#10;坚果云：{webdav}"
             class="notify-control"
             maxlength="1000"
             show-count
