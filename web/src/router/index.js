@@ -58,6 +58,11 @@ const routes = [
         component: () => import('../views/admin/OperationLog.vue'),
       },
       {
+        path: 'appearance',
+        name: 'AppearanceManage',
+        component: () => import('../views/admin/AppearanceManage.vue'),
+      },
+      {
         path: 'settings',
         name: 'Settings',
         component: () => import('../views/admin/Settings.vue'),

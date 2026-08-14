@@ -143,7 +143,7 @@ const CUSTOM_GROUPS = [
       { key: '--link-lock-bg', label: '锁定条目底', desc: '加密书签条目底色' },
       { key: '--link-lock-border', label: '锁定条目边框', desc: '加密书签条目虚线边框' },
       { key: '--link-lock-text', label: '锁定文字', desc: '加密条目「已加密」文字' },
-      { key: '--link-idle', label: '闲置时钟', desc: '超 30 天未访问的红色时钟角标' },
+      { key: '--link-idle', label: '闲置时钟', desc: '名称右侧超 30 天未访问的时钟图标' },
     ],
   },
   {

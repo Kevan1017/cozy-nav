@@ -573,7 +573,7 @@ function ensureProtocol(url) {
         </div>
         <div class="inline-field col-fav">
           <n-form-item label="常用标记">
-            <n-checkbox v-model:checked="form.is_favorite" class="fav-checkbox">标记为常用书签（前台右上角显示金色星标）</n-checkbox>
+            <n-checkbox v-model:checked="form.is_favorite" class="fav-checkbox">标记为常用书签（前台条目左侧显示金色竖条）</n-checkbox>
           </n-form-item>
         </div>
       </div>

@@ -22,6 +22,7 @@ import {
 } from 'naive-ui';
 import { exportJSON, exportBookmarks, importJSON, importBookmarks } from '../../../api/importExport.js';
 import { useDataStore } from '../../../stores/data.js';
+import { MAX_IMPORT_SIZE, validateImportFile } from '../../../composables/importFileValidation.js';
 
 const message = useMessage();
 const dataStore = useDataStore();
@@ -69,8 +70,24 @@ const strategyOptions = [
 
 function handleImportSelect({ file }) {
   // Naive UI 的 file 是 UploadFileInfo，原生 File 在 file.file 中
-  importFile.value = file.file || null;
+  const raw = file.file || null;
+  // 选择文件时即校验大小，避免传到后端才被 413 拦截
+  const err = validateImportFile(raw);
+  if (err) {
+    message.error(err);
+    importFile.value = null;
+    importFileName.value = '';
+    return;
+  }
+  importFile.value = raw;
   importFileName.value = file.name || '';
+}
+
+/** NUpload max-size 超限文件触发的错误回调 */
+function handleUploadError({ file }) {
+  if (file.status === 'error') {
+    message.error('文件大小不能超过 2MB');
+  }
 }
 
 async function handleImport() {
@@ -122,7 +139,6 @@ function closeImportModal() {
 
     <div class="action-group">
       <div class="action-section">
-        <div class="section-label">导出数据</div>
         <n-space wrap>
           <n-dropdown
             :options="[
@@ -155,8 +171,26 @@ function closeImportModal() {
       <n-tabs v-model:value="importTab" type="line">
         <n-tab-pane name="json" tab="📄 JSON 格式">
           <p class="hint" style="margin-bottom: 12px;">
-            导入 JSON 格式的数据文件（从本系统导出的 .json 文件）
+            导入 JSON 格式的数据文件（从本系统导出的 .json 文件，或符合下方格式的自定义文件）
           </p>
+          <div class="format-tip">
+            <div class="format-tip-title">JSON 格式要求</div>
+            <ul>
+              <li>顶层为对象，必须包含 <code>categories</code> 数组（非空）</li>
+              <li>每个分类必须有 <code>name</code>，其余字段（emoji、subtitle 等）可省略</li>
+              <li>每条链接必须有 <code>name</code> 和 <code>url</code>，其余字段导入时自动补全</li>
+            </ul>
+            <pre>{
+  "categories": [
+    {
+      "name": "工具",
+      "links": [
+        { "name": "GitHub", "url": "https://github.com/" }
+      ]
+    }
+  ]
+}</pre>
+          </div>
         </n-tab-pane>
         <n-tab-pane name="bookmarks" tab="🔖 浏览器书签">
           <p class="hint" style="margin-bottom: 12px;">
@@ -198,7 +232,9 @@ function closeImportModal() {
           <n-upload
             :accept="importTab === 'json' ? '.json' : '.html,.htm'"
             :max="1"
+            :max-size="MAX_IMPORT_SIZE"
             @change="handleImportSelect"
+            @error="handleUploadError"
           >
             <n-button>📁 选择文件</n-button>
           </n-upload>
@@ -280,6 +316,45 @@ function closeImportModal() {
 }
 :deep(.n-tab-pane) {
   padding: 12px 0;
+}
+
+/* JSON 格式说明 */
+.format-tip {
+  border: 1px solid var(--admin-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: color-mix(in oklab, var(--admin-card) 55%, transparent);
+  font-size: 12px;
+  color: var(--admin-muted);
+  line-height: 1.8;
+}
+.format-tip-title {
+  font-weight: 600;
+  color: var(--admin-text-2);
+  margin-bottom: 4px;
+}
+.format-tip ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.format-tip code {
+  background: var(--admin-card);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-family: Consolas, Monaco, monospace;
+  color: var(--admin-accent);
+}
+.format-tip pre {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--admin-card);
+  overflow-x: auto;
+  font-size: 11px;
+  font-family: Consolas, Monaco, monospace;
+  color: var(--admin-text-2);
+  white-space: pre;
 }
 
 /* 导入结果报告 */
