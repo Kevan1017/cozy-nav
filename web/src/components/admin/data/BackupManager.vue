@@ -191,12 +191,12 @@ async function handleTest() {
         应用密码获取：登录坚果云网页端 → 右上角头像 → 账户信息 → 安全选项 → 应用密码 → 添加（授权访问 WebDAV）。
       </p>
       <div class="cfg-actions">
-        <n-button size="small" :loading="testing" @click="handleTest">🧪 测试连接</n-button>
+        <n-button size="small" :loading="testing" @click="handleTest">测试连接</n-button>
       </div>
     </div>
 
     <div class="cfg-actions">
-      <n-button type="primary" :loading="running" @click="handleRun">▶️ 立即备份</n-button>
+      <n-button type="primary" :loading="running" @click="handleRun">立即备份</n-button>
       <n-button :loading="saving" @click="handleSave">保存配置</n-button>
     </div>
 
@@ -394,11 +394,9 @@ async function handleTest() {
 
 /* 移动端适配 */
 @media (max-width: 640px) {
+  /* 备份记录保持一行：名称超长省略，大小固定靠右，不换行 */
   .bk-item {
-    flex-wrap: wrap;
-  }
-  .bk-name {
-    flex-basis: 100%;
+    flex-wrap: nowrap;
   }
   .cfg-actions {
     flex-direction: column;

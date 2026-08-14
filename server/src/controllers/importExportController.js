@@ -154,6 +154,12 @@ export function importJSON(req, res) {
   }
 
   try {
+    // 深度校验：categories 中必须至少有一个带 name 的有效分类，否则拒绝（避免假成功）
+    const hasValidCategory = categories.some((cat) => cat && typeof cat === 'object' && cat.name);
+    if (!hasValidCategory) {
+      return jsonError(res, '数据格式无效：未识别到任何有效分类');
+    }
+
     db.exec('BEGIN');
 
     for (const cat of categories) {
@@ -296,10 +302,16 @@ export function importBookmarks(req, res) {
     }
   }
 
+  let inTransaction = false; // 事务是否已开启：BEGIN 之前的错误（如文件校验）不需要回滚
   try {
     const parsed = parseBookmarkHTML(html);
+    // 无有效分类：明确提示而不是返回「导入成功 0 条」的假成功
+    if (parsed.folders.length === 0) {
+      return jsonError(res, '文件中没有识别到可导入的书签数据');
+    }
 
     db.exec('BEGIN');
+    inTransaction = true;
 
     for (const folder of parsed.folders) {
       if (!folder.name || folder.links.length === 0) continue;
@@ -376,62 +388,90 @@ export function importBookmarks(req, res) {
     }, req);
     jsonSuccess(res, stats, `导入成功：新建 ${stats.categoriesCreated} 个分类，新增 ${stats.linksCreated} 个链接，更新 ${stats.linksUpdated} 个，跳过 ${stats.linksSkipped} 个`);
   } catch (e) {
-    db.exec('ROLLBACK');
+    // 仅在事务已开启时回滚，避免「无活动事务」错误覆盖原始错误
+    if (inTransaction) db.exec('ROLLBACK');
+    // 文件特征校验失败：向客户端返回具体原因；其余内部错误不泄露细节
+    if (e.code === 'INVALID_BOOKMARK_FILE') {
+      return jsonError(res, e.message);
+    }
     // 不向客户端泄露内部错误细节，仅输出到日志
-    console.log(`[${new Date().toISOString()}] [导入] [失败] ${e.message}`);
+    console.log(`[${new Date().toISOString()}] [导入] [HTML] [失败] ${e.message}`);
     jsonError(res, '导入失败，请检查数据后重试');
   }
 }
 
 /**
- * 解析浏览器书签 HTML
+ * 解析浏览器书签 HTML（兼容 Chrome / Edge / Firefox / Safari 导出的 Netscape 书签格式）
+ * - 递归处理 <DL>/<DT> 嵌套结构，嵌套文件夹拍平为「父/子」独立分类（策略 A）
+ * - 属性差异统一处理：ADD_DATE / LAST_MODIFIED 均忽略，ICON(base64) / ICON_URI / FOLDED 直接跳过
+ * - 特征校验：必须包含 Netscape 书签 DOCTYPE 或至少一个 <A HREF，否则抛错拒绝导入
  */
-function parseBookmarkHTML(html) {
-  const folders = [];
-  
-  // 使用简单的字符串解析，正则提取 H3 标题和 DT 链接
-  // 移除注释
-  const cleanedHtml = html.replace(/<!--[\s\S]*?-->/g, '');
-  
-  // 按 H3 分割文件夹
-  const h3Regex = /<H3[^>]*>([\s\S]*?)<\/H3>/gi;
-  let match;
-  let lastIndex = 0;
-  
-  while ((match = h3Regex.exec(cleanedHtml)) !== null) {
-    // 获取 H3 之后到下一个 H3 或结束之间的内容
-    const folderName = match[1].replace(/<[^>]*>/g, '').trim();
-    const startPos = h3Regex.lastIndex;
-    
-    // 找下一个 H3
-    const nextMatch = h3Regex.exec(cleanedHtml);
-    const endPos = nextMatch ? nextMatch.index : cleanedHtml.length;
-    
-    const folderContent = cleanedHtml.substring(startPos, endPos);
-    
-    // 提取 DT 链接
-    const linkRegex = /<A\s+HREF="([^"]*)"[^>]*>([\s\S]*?)<\/A>/gi;
-    let linkMatch;
-    const links = [];
-    
-    while ((linkMatch = linkRegex.exec(folderContent)) !== null) {
-      links.push({
-        url: linkMatch[1],
-        name: linkMatch[2].replace(/<[^>]*>/g, '').trim(),
-      });
-    }
-    
-    // 清理文件夹名称（移除 emoji 前缀）
-    const cleanName = folderName.replace(/^[^\w\u4e00-\u9fff]*/, '').trim() || folderName;
-    
-    if (cleanName && links.length > 0) {
-      folders.push({ name: cleanName, links });
-    }
-    
-    lastIndex = endPos;
-    if (!nextMatch) break;
+export function parseBookmarkHTML(html) {
+  // 移除注释，避免干扰结构解析
+  const cleaned = html.replace(/<!--[\s\S]*?-->/g, '');
+
+  // 特征校验：识别浏览器导出的书签文件，普通 HTML 不允许混入
+  if (!/(<!DOCTYPE\s+NETSCAPE-Bookmark-file-1)|<A\s+HREF=/i.test(cleaned)) {
+    throw Object.assign(new Error('不是有效的浏览器书签文件，请确认文件由 Chrome / Edge / Firefox / Safari 导出'), { code: 'INVALID_BOOKMARK_FILE' });
   }
-  
+
+  const folders = []; // 拍平后的分类 [{ name, links }]
+
+  // 从 dlTagIdx（指向 '<DL'）解析一个容器，返回 { nextPos, links }
+  // links 为该容器内直接链接（不属于任何子文件夹），供父文件夹归集；
+  // 容器内嵌套子文件夹则递归解析，并即时以「父/子」路径拍平入库
+  function walkDL(dlTagIdx, path) {
+    let pos = cleaned.indexOf('>', dlTagIdx) + 1; // 跳过 <DL 开始标签
+    const links = [];
+
+    for (;;) {
+      // 容器内最近的 <DT 与 </DL，谁先出现决定后续走向
+      const dtIdx = cleaned.toLowerCase().indexOf('<dt', pos);
+      const dlEndIdx = cleaned.toLowerCase().indexOf('</dl', pos);
+      if (dlEndIdx >= 0 && (dtIdx < 0 || dlEndIdx < dtIdx)) {
+        return { nextPos: cleaned.indexOf('>', dlEndIdx) + 1, links };
+      }
+      if (dtIdx < 0) return { nextPos: cleaned.length, links };
+
+      const content = cleaned.slice(cleaned.indexOf('>', dtIdx + 3) + 1);
+
+      if (/^\s*<H3\b/i.test(content)) {
+        // 文件夹条目：提取名称，检查其内容是否为嵌套 <DL>
+        const h3Match = content.match(/<H3\b[^>]*>([\s\S]*?)<\/H3>/i);
+        if (!h3Match) { pos = dtIdx + 3; continue; }
+        const rawName = h3Match[1].replace(/<[^>]*>/g, '').trim();
+        // 清理 emoji / 特殊字符前缀（浏览器导出常带 📁 等图标）
+        const cleanName = rawName.replace(/^[^\w\u4e00-\u9fff]+/, '').trim() || '未命名';
+        const childPath = path ? `${path}/${cleanName}` : cleanName;
+        const afterH3 = cleaned.indexOf('>', dtIdx + 3) + 1 + h3Match.index + h3Match[0].length;
+        const nextDlIdx = cleaned.toLowerCase().indexOf('<dl', afterH3);
+        const nextDlEndIdx = cleaned.toLowerCase().indexOf('</dl', afterH3);
+
+        if (nextDlIdx >= 0 && (nextDlEndIdx < 0 || nextDlIdx < nextDlEndIdx)) {
+          // 有子内容：递归解析，子容器直接链接归入「父/子」分类
+          const child = walkDL(nextDlIdx, childPath);
+          if (child.links.length) folders.push({ name: childPath, links: child.links });
+          pos = child.nextPos;
+        } else {
+          pos = afterH3; // 空文件夹：跳过
+        }
+      } else if (/^\s*<A\b/i.test(content)) {
+        // 链接条目：提取 HREF 与显示名
+        const aMatch = content.match(/<A\b[^>]*HREF="([^"]*)"[^>]*>([\s\S]*?)<\/A>/i);
+        if (!aMatch) { pos = dtIdx + 3; continue; }
+        const name = aMatch[2].replace(/<[^>]*>/g, '').trim();
+        links.push({ url: aMatch[1], name: name || aMatch[1] });
+        pos = cleaned.indexOf('>', dtIdx + 3) + 1 + aMatch.index + aMatch[0].length;
+      } else {
+        pos = dtIdx + 3; // 其它标签（<HR>、<P> 等）：跳过
+      }
+    }
+  }
+
+  // 顶层容器（浏览器导出的根 <DL>），顶层裸链接不归属任何分类，忽略
+  const rootDlIdx = cleaned.toLowerCase().indexOf('<dl');
+  if (rootDlIdx >= 0) walkDL(rootDlIdx, '');
+
   return { folders };
 }
 

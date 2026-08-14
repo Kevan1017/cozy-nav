@@ -2,18 +2,17 @@
 /**
  * 偏好设置页（容器）
  * 各功能卡片已拆分为独立子组件：
- * - SettingsSite       🌐 站点设置（分段切换：基本配置 / 前台显示）
- * - SettingsAppearance 🎨 外观设置（分段切换：外观主题 / 默认主题 / 自定义配色）
+ * - SettingsSite       🌐 站点设置（基本配置：标题 / Logo / 关键词 / 描述）
  * - SettingsSecurity   🔐 安全设置（分段切换：登录密码 / 保险库）
  * 注：链接巡检（SettingsHealth）已于 2026-08-11 抽离为独立菜单「链接巡检」（/admin/health）；
  *     巡检通知与备份通知已于同日抽离为独立菜单「通知中心」（/admin/notify）；
- *     数据管理（导出/导入 + 自动备份）已抽离为独立菜单「数据管理」（/admin/data）
+ *     数据管理（导出/导入 + 自动备份）已抽离为独立菜单「数据管理」（/admin/data）；
+ *     外观设置（SettingsAppearance）与前台显示（SettingsDisplay）已抽离为独立菜单「外观设置」（/admin/appearance）
  */
 import { ref, computed, onMounted } from 'vue';
 import { NPageHeader } from 'naive-ui';
 import { usePrefsStore } from '../../stores/prefs.js';
 import SettingsSite from '../../components/admin/settings/SettingsSite.vue';
-import SettingsAppearance from '../../components/admin/settings/SettingsAppearance.vue';
 import SettingsSecurity from '../../components/admin/settings/SettingsSecurity.vue';
 import CollapsibleCard from '../../components/admin/settings/CollapsibleCard.vue';
 import ChangelogPanel from '../../components/admin/settings/ChangelogPanel.vue';
@@ -55,7 +54,6 @@ onMounted(() => {
     />
 
     <SettingsSite />
-    <SettingsAppearance />
     <SettingsSecurity />
 
     <!-- 关于悦行：展示当前部署版本信息（来自 Git，随提交自动更新） -->
