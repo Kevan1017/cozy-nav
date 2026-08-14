@@ -253,13 +253,15 @@ const RENDERERS = {
     const issues = stat.fail || 0;
     if (event.strategy !== 'always' && issues < event.minIssues) return null;
     const timeStr = new Date().toLocaleString('zh-CN', { hour12: false });
+    // issues 由渲染器单独计算，渲染标题时需并入数据，否则 {issues} 会替换为空
+    const map = { ...stat, issues };
     // 全部正常时标题固定，避免"发现 0 条异常"的奇怪文案
     const title = issues > 0
-      ? renderTemplate(event.titleTemplate || '🩺 巡检发现 {issues} 条异常', stat, timeStr)
+      ? renderTemplate(event.titleTemplate || '🩺 巡检发现 {issues} 条异常', map, timeStr)
       : '🩺 巡检完成（全部正常）';
     const desp = renderTemplate(
       event.bodyTemplate || '正常 {ok} · 需代理 {blocked} · 打不开 {fail} · 跳过 {skip}\n\n检测时间：{time}',
-      stat,
+      map,
       timeStr
     );
     return { title, desp };

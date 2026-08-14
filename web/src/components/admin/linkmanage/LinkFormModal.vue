@@ -2,11 +2,10 @@
 /**
  * 书签管理 - 新建/编辑表单（从 LinkManage.vue 拆出）
  * - URL / 名称 / 分类 / 备注 / 域名 / 头像文字 / 头像颜色 / 排序权重
- * - 手动获取 favicon / 网页标题
- * - URL 变化自动解析标题 + 图标（防抖，不覆盖用户输入）
+ * - 手动获取 favicon / 网页标题（不自动获取，点击按钮才请求，自动补全协议）
  * - 保存时处理重复链接（业务码 409）二次确认
  */
-import { ref, computed, watch, nextTick, h, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, nextTick, h } from 'vue';
 import {
   NModal,
   NForm,
@@ -16,8 +15,6 @@ import {
   NSelect,
   NButton,
   NCheckbox,
-  NCollapse,
-  NCollapseItem,
   useMessage,
   useDialog,
 } from 'naive-ui';
@@ -283,8 +280,8 @@ async function handleRemoveFavicon() {
 
 /** 表单中手动获取图标（创建/编辑均可用） */
 async function handleFetchFavicon() {
-  const f = form.value;
-  if (!f.url) {
+  const target = ensureProtocol(form.value.url);
+  if (!target) {
     message.warning('请先填写 URL');
     return;
   }
@@ -293,7 +290,7 @@ async function handleFetchFavicon() {
   const loadingMsg = message.loading('正在获取图标，请稍候…', { duration: 0 });
   try {
     // 统一用 URL 接口，创建和编辑都能用
-    const res = await linkApi.fetchFaviconByUrl(f.url);
+    const res = await linkApi.fetchFaviconByUrl(target);
     formFaviconPath.value = res.data.favicon_path || '';
     if (res.data.favicon_path) {
       message.success('图标获取成功');
@@ -311,14 +308,14 @@ async function handleFetchFavicon() {
 
 /** 手动获取网页标题 */
 async function handleFetchTitle() {
-  const f = form.value;
-  if (!f.url) {
+  const target = ensureProtocol(form.value.url);
+  if (!target) {
     message.warning('请先填写 URL');
     return;
   }
   titleFetching.value = true;
   try {
-    const res = await linkApi.fetchTitle(f.url);
+    const res = await linkApi.fetchTitle(target);
     if (res.data?.title) {
       form.value.name = res.data.title;
       // 同步更新头像文字
@@ -413,44 +410,12 @@ async function saveLink() {
   } finally { submitting.value = false; }
 }
 
-/* ---------- URL 变化自动解析（快速添加） ---------- */
-const autoParsing = ref(false);
-let autoParseTimer = null;
-
-/** URL 变化后防抖自动解析标题 + 图标（仅在名称尚未填写时填充，避免覆盖用户输入） */
-watch(
-  () => form.value.url,
-  (val) => {
-    clearTimeout(autoParseTimer);
-    const v = (val || '').trim();
-    if (!/^https?:\/\//i.test(v) || autoParsing.value) return;
-    // 名称已有内容时不自动覆盖（保留用户输入）
-    autoParseTimer = setTimeout(async () => {
-      autoParsing.value = true;
-      try {
-        // 自动获取标题（仅当名称未填写时）
-        if (!form.value.name.trim()) {
-          const t = await linkApi.fetchTitle(v);
-          if (t.data?.title && !form.value.name.trim()) {
-            form.value.name = t.data.title;
-            if (!form.value.avatar_text.trim()) {
-              form.value.avatar_text = t.data.title.slice(0, 1).toUpperCase();
-            }
-          }
-        }
-        // 自动获取图标（预览）；用户已上传自定义图标时不覆盖
-        if (!formFaviconPath.value && !faviconDataUrl.value) {
-          const f = await linkApi.fetchFaviconByUrl(v);
-          if (f.data?.favicon_path) formFaviconPath.value = f.data.favicon_path;
-        }
-      } catch { /* 静默失败，不打断输入 */ } finally {
-        autoParsing.value = false;
-      }
-    }, 600);
-  }
-);
-
-onBeforeUnmount(() => clearTimeout(autoParseTimer));
+/* ---------- URL 预处理：手动获取时自动补全协议（避免"必须以 http:// 开头" 400） ---------- */
+function ensureProtocol(url) {
+  const v = (url || '').trim();
+  if (!v) return '';
+  return /^https?:\/\//i.test(v) ? v : `https://${v}`;
+}
 </script>
 
 <template>
@@ -460,7 +425,7 @@ onBeforeUnmount(() => clearTimeout(autoParseTimer));
     :mask-closable="true"
     preset="card"
     :title="modalMode === 'create' ? '新建书签' : '编辑书签'"
-    style="width: clamp(320px, 92vw, 600px);"
+    style="width: clamp(320px, 92vw, 540px);"
     :segmented="{ content: true, action: true }"
     :bordered="false"
     class="link-modal"
@@ -473,47 +438,24 @@ onBeforeUnmount(() => clearTimeout(autoParseTimer));
       label-align="left"
       size="medium"
     >
-      <!-- ===== 基本信息 ===== -->
-      <div class="section-title">基本信息</div>
       <n-form-item label="URL" path="url">
         <div class="url-wrap">
-          <n-input v-model:value="form.url" placeholder="https://github.com" clearable />
-          <p v-if="normalizedPreview" class="url-preview">
-            判重指纹：<code>{{ normalizedPreview }}</code>（保存时按此判定是否重复）
-          </p>
-        </div>
-      </n-form-item>
-
-      <!-- ===== 外观 ===== -->
-      <div class="section-title">外观</div>
-      <div class="appearance-box">
-        <!-- 行1：图标预览 + 头像文字 + 图标操作按钮（窄屏自动换行） -->
-        <div class="appearance-main">
-          <div v-if="formFaviconPath || faviconDataUrl" class="favicon-preview">
-            <img
-              :src="formFaviconPath ? `/favicons/${formFaviconPath}` : faviconDataUrl"
-              class="fav-preview-img"
-              alt=""
-            >
-            <span class="fav-preview-text">已获取</span>
-          </div>
-          <n-form-item label="头像文字（留空自动取首字母）" path="avatar_text" class="avatar-item">
-            <n-input
-              v-model:value="form.avatar_text"
-              placeholder="G"
-              maxlength="2"
-            />
-          </n-form-item>
-          <div class="favicon-actions">
-            <n-button size="small" quaternary :loading="faviconFetching" :disabled="!form.url" @click="handleFetchFavicon">获取图标</n-button>
-            <n-button size="small" quaternary :loading="faviconUploading" @click="triggerFaviconUpload">上传图标</n-button>
+          <div class="url-field">
+            <n-input v-model:value="form.url" placeholder="https://github.com" clearable />
             <n-button
-              v-if="formFaviconPath || faviconDataUrl"
-              size="small"
+              size="medium"
               quaternary
-              type="error"
-              @click="handleRemoveFavicon"
-            >移除</n-button>
+              :loading="faviconFetching"
+              :disabled="!form.url"
+              @click="handleFetchFavicon"
+            >获取图标</n-button>
+            <!-- 上传图标：触发隐藏文件选择框，canvas 压缩 64x64 后上传 -->
+            <n-button
+              size="medium"
+              quaternary
+              :loading="faviconUploading"
+              @click="triggerFaviconUpload"
+            >上传图标</n-button>
             <input
               ref="faviconFileInput"
               type="file"
@@ -522,36 +464,23 @@ onBeforeUnmount(() => clearTimeout(autoParseTimer));
               @change="handleFaviconFileChange"
             >
           </div>
+          <p v-if="normalizedPreview" class="url-preview">
+            判重指纹：<code>{{ normalizedPreview }}</code>（保存时按此判定是否重复）
+          </p>
         </div>
-        <!-- 行2：头像颜色 -->
-        <n-form-item label="头像颜色" path="avatar_color">
-          <div class="color-field">
-            <div class="color-row">
-              <button
-                v-for="c in BG_COLORS"
-                :key="c"
-                type="button"
-                class="color-dot"
-                :class="{ on: form.avatar_color === c }"
-                :style="{ background: `var(--${c})` }"
-                :title="c"
-                @click="form.avatar_color = c"
-              />
-            </div>
-            <div class="hex-row">
-              <span class="color-preview" :style="{ background: resolveColor(form.avatar_color) }" />
-              <n-input
-                :value="displayHex(form.avatar_color)"
-                placeholder="或输入 HEX 值，如 #FF5500"
-                size="small"
-                class="hex-input"
-                @update:value="form.avatar_color = $event"
-              />
-              <n-button size="small" quaternary @click="randomAvatarColor">🎲 随机</n-button>
-            </div>
-          </div>
-        </n-form-item>
-      </div>
+      </n-form-item>
+
+      <n-form-item v-if="formFaviconPath || faviconDataUrl" label="图标预览">
+        <div class="favicon-preview">
+          <img
+            :src="formFaviconPath ? `/favicons/${formFaviconPath}` : faviconDataUrl"
+            class="fav-preview-img"
+            alt=""
+          >
+          <span class="fav-preview-text">已获取</span>
+          <n-button size="small" quaternary type="error" @click="handleRemoveFavicon">移除</n-button>
+        </div>
+      </n-form-item>
 
       <n-form-item label="名称" path="name">
         <div class="url-field">
@@ -566,35 +495,73 @@ onBeforeUnmount(() => clearTimeout(autoParseTimer));
         </div>
       </n-form-item>
 
-      <!-- 分类 + 域名 并排一行（分类稍窄） -->
-      <div class="field-pair">
-        <n-form-item label="分类" path="category_id" class="pair-cat">
-          <n-select
-            v-model:value="form.category_id"
-            :options="catOptions.filter(o => o.value !== 0)"
-            placeholder="请选择分类"
-          />
-        </n-form-item>
-        <n-form-item label="域名（留空自动提取）" path="domain" class="pair-domain">
-          <n-input v-model:value="form.domain" placeholder="github.com" clearable />
-        </n-form-item>
-      </div>
+      <n-form-item label="分类" path="category_id">
+        <n-select
+          v-model:value="form.category_id"
+          :options="catOptions.filter(o => o.value !== 0)"
+          placeholder="请选择分类"
+        />
+      </n-form-item>
 
-      <!-- ===== 高级（默认折叠） ===== -->
-      <div class="section-title">高级</div>
-      <n-collapse>
-        <n-collapse-item title="备注 / 排序权重 / 常用标记" name="advanced">
-          <n-form-item label="备注（仅管理员可见）" path="note">
+      <n-form-item label="备注（仅管理员可见）" path="note">
+        <n-input
+          v-model:value="form.note"
+          type="textarea"
+          :autosize="{ minRows: 2, maxRows: 4 }"
+          placeholder="为什么收藏？怎么用？（仅自己在后台可见）"
+          maxlength="200"
+          show-count
+        />
+      </n-form-item>
+
+      <div class="inline-field-row">
+        <div class="inline-field">
+          <n-form-item label="域名（留空自动提取）" path="domain">
+            <n-input v-model:value="form.domain" placeholder="github.com" clearable />
+          </n-form-item>
+        </div>
+        <div class="inline-field">
+          <n-form-item label="头像文字（留空自动取首字母）" path="avatar_text">
             <n-input
-              v-model:value="form.note"
-              type="textarea"
-              :autosize="{ minRows: 2, maxRows: 4 }"
-              placeholder="为什么收藏？怎么用？（仅自己在后台可见）"
-              maxlength="200"
-              show-count
+              v-model:value="form.avatar_text"
+              placeholder="G"
+              maxlength="2"
+              style="max-width: 180px;"
             />
           </n-form-item>
+        </div>
+      </div>
 
+      <n-form-item label="头像颜色" path="avatar_color">
+        <div class="color-field">
+          <div class="color-row">
+            <button
+              v-for="c in BG_COLORS"
+              :key="c"
+              type="button"
+              class="color-dot"
+              :class="{ on: form.avatar_color === c }"
+              :style="{ background: `var(--${c})` }"
+              :title="c"
+              @click="form.avatar_color = c"
+            />
+          </div>
+          <div class="hex-row">
+            <span class="color-preview" :style="{ background: resolveColor(form.avatar_color) }" />
+            <n-input
+              :value="displayHex(form.avatar_color)"
+              placeholder="或输入 HEX 值，如 #FF5500"
+              size="small"
+              class="hex-input"
+              @update:value="form.avatar_color = $event"
+            />
+            <n-button size="small" quaternary @click="randomAvatarColor">🎲 随机</n-button>
+          </div>
+        </div>
+      </n-form-item>
+
+      <div class="inline-field-row row-end">
+        <div class="inline-field col-sort">
           <n-form-item label="排序权重" path="sort_order">
             <n-input-number
               v-model:value="form.sort_order"
@@ -603,12 +570,13 @@ onBeforeUnmount(() => clearTimeout(autoParseTimer));
               style="width: 100%"
             />
           </n-form-item>
-
+        </div>
+        <div class="inline-field col-fav">
           <n-form-item label="常用标记">
-            <n-checkbox v-model:checked="form.is_favorite">标记为常用书签（前台右上角显示金色星标）</n-checkbox>
+            <n-checkbox v-model:checked="form.is_favorite" class="fav-checkbox">标记为常用书签（前台右上角显示金色星标）</n-checkbox>
           </n-form-item>
-        </n-collapse-item>
-      </n-collapse>
+        </div>
+      </div>
     </n-form>
 
     <template #footer>
@@ -643,6 +611,26 @@ onBeforeUnmount(() => clearTimeout(autoParseTimer));
   flex-direction: column;
   gap: 10px;
   width: 100%;
+}
+/* 尾部行：排序权重仅一个数字，缩窄列宽；常用标记占满剩余并保证文本不换行 */
+.inline-field-row.row-end .col-sort {
+  flex: 0 0 150px;
+}
+.inline-field-row.row-end .col-fav {
+  flex: 1 1 auto;
+}
+.inline-field-row.row-end .fav-checkbox {
+  white-space: nowrap;
+}
+@media (max-width: 1023px) {
+  /* 移动端窄屏：两列换行为整行，避免 checkbox 文本溢出 */
+  .inline-field-row.row-end {
+    flex-wrap: wrap;
+  }
+  .inline-field-row.row-end .col-sort,
+  .inline-field-row.row-end .col-fav {
+    flex: 1 1 100%;
+  }
 }
 .color-row {
   display: flex;
@@ -695,53 +683,6 @@ onBeforeUnmount(() => clearTimeout(autoParseTimer));
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-}
-
-/* 分类 + 域名 并排一行（分类稍窄，窄屏自动换行） */
-.field-pair {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.pair-cat { flex: 2 1 130px; }
-.pair-domain { flex: 3 1 190px; }
-
-/* 分区标题（基本信息 / 外观 / 高级）：小字加粗 + 右侧细分隔线 */
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--admin-muted);
-  margin: 16px 0 4px;
-}
-.section-title:first-child { margin-top: 0; }
-.section-title::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--admin-divider, rgba(128, 128, 128, .18));
-}
-
-/* 外观区：行1（预览/头像文字/按钮）窄屏自动换行，行2 颜色 */
-.appearance-box {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.appearance-main {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  align-items: flex-end;
-}
-.avatar-item { flex: 1 1 150px; }
-.avatar-item .n-input { width: 100%; }
-.favicon-actions {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
 }
 
 /* URL 输入区容器：块级占满整行，预览在输入框下方另起一行 */

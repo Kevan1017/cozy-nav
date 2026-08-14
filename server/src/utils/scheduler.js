@@ -79,8 +79,7 @@ export function startHealthPatrol() {
 
   const scheduleNext = () => {
     const cfg = getHealthConfig();
-    // 间隔下限 10 分钟，防止误配导致频繁出站
-    const intervalMs = Math.max(10 * 60 * 1000, (cfg.intervalHours || 6) * 3600 * 1000);
+    const intervalMs = (cfg.intervalHours || 6) * 3600 * 1000;
     patrolTimer = setTimeout(async () => {
       await runPatrolOnce();
       scheduleNext(); // 动态读取最新配置

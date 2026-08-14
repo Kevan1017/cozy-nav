@@ -7,9 +7,9 @@
  */
 import db from '../db/index.js';
 import { jsonSuccess, jsonError } from '../utils/response.js';
-import { listBackups, parseBackupConfig, DEFAULT_BACKUP_CONFIG, DATA_DIR } from '../utils/backup.js';
+import { listBackups, parseBackupConfig, DEFAULT_BACKUP_CONFIG, DATA_DIR, formatBackupTime } from '../utils/backup.js';
 import { triggerBackupNow } from '../utils/scheduler.js';
-import { testWebDAVConnection } from '../utils/webdavBackup.js';
+import { testWebDAVConnection, listWebdavBackups } from '../utils/webdavBackup.js';
 
 /**
  * 读取备份配置
@@ -96,11 +96,39 @@ export async function testWebdav(req, res) {
 }
 
 /**
- * 最近备份记录列表
+ * 最近备份记录列表（区分本地 / 坚果云云端）
  * GET /api/backup/list
+ * 返回 { local, webdav, webdavEnabled, webdavOk, webdavReason }
+ * - webdavEnabled=false：WebDAV 未启用或配置不完整，不查询云端
+ * - webdavEnabled=true 且 webdavOk=false：webdavReason 说明失败原因（限流/接口异常），前端据此提示
  */
-export function getBackupList(req, res) {
-  return jsonSuccess(res, listBackups());
+export async function getBackupList(req, res) {
+  const local = listBackups().map((b) => ({ ...b, source: 'local' }));
+
+  // 云端记录：仅当 WebDAV 已启用且配置完整时查询
+  const row = db.prepare('SELECT backup_config FROM preferences WHERE id = 1').get();
+  const cfg = parseBackupConfig(row?.backup_config);
+  const w = cfg?.webdav || {};
+  const webdavEnabled = !!(w.enabled && w.url && w.user && w.pass);
+  let webdav = [];
+  let webdavOk = true;
+  let webdavReason = '';
+  if (webdavEnabled) {
+    const r = await listWebdavBackups(w);
+    if (r.ok) {
+      webdav = r.names.map((name) => ({
+        name,
+        time: formatBackupTime(name),
+        size: null,
+        source: 'webdav',
+      }));
+    } else {
+      webdavOk = false;
+      webdavReason = r.reason || '获取云端记录失败';
+    }
+  }
+
+  return jsonSuccess(res, { local, webdav, webdavEnabled, webdavOk, webdavReason });
 }
 
 export { DEFAULT_BACKUP_CONFIG };

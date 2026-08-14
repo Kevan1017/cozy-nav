@@ -228,8 +228,9 @@ export function runLocalBackup() {
 
 /**
  * 格式化备份时间：backup-YYYYMMDD-HHmmss-FFF → YYYY-MM-DD HH:mm:ss
+ * （供本地/云端备份记录复用）
  */
-function formatBackupTime(name) {
+export function formatBackupTime(name) {
   const m = name.match(/^backup-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/);
   if (!m) return name;
   const [, y, mo, d, h, mi, s] = m;

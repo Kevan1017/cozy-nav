@@ -30,8 +30,12 @@ const form = ref({ ...DEFAULT_CONFIG });
 const saving = ref(false);
 const running = ref(false);
 const testing = ref(false);
-const backups = ref([]);
+const backups = ref({ local: [], webdav: [] });
 const loadingList = ref(false);
+/** 坚果云云端记录查询状态（未启用 / 成功 / 失败原因） */
+const webdavEnabled = ref(false);
+const webdavOk = ref(true);
+const webdavReason = ref('');
 
 /** 格式化文件大小（B/KB/MB） */
 function formatSize(bytes) {
@@ -57,8 +61,11 @@ async function fetchConfig() {
 async function fetchList() {
   loadingList.value = true;
   try {
-    const res = await backupApi.list();
-    backups.value = res.data || [];
+    const d = (await backupApi.list()).data || {};
+    backups.value = { local: d.local || [], webdav: d.webdav || [] };
+    webdavEnabled.value = !!d.webdavEnabled;
+    webdavOk.value = d.webdavOk !== false;
+    webdavReason.value = d.webdavReason || '';
   } catch { /* 静默 */ } finally {
     loadingList.value = false;
   }
@@ -193,17 +200,35 @@ async function handleTest() {
       <n-button :loading="saving" @click="handleSave">保存配置</n-button>
     </div>
 
-    <!-- 最近备份记录 -->
+    <!-- 最近备份记录（区分本地 / 坚果云云端） -->
     <p class="cfg-group-title">最近备份记录</p>
     <div v-if="loadingList" class="list-hint">加载中…</div>
-    <div v-else-if="!backups.length" class="list-hint">
+    <div v-else-if="!backups.local.length && !webdavEnabled" class="list-hint">
       <n-empty description="暂无备份记录，点击「立即备份」生成第一份快照" size="small" />
     </div>
-    <div v-else class="bk-list">
-      <div v-for="bk in backups" :key="bk.name" class="bk-item">
-        <span class="bk-name">🕐 {{ bk.time }}</span>
-        <span class="bk-size">{{ formatSize(bk.size) }}</span>
-      </div>
+    <div v-else class="bk-wrap">
+      <template v-if="backups.local.length || webdavEnabled">
+        <template v-if="backups.local.length">
+          <p class="bk-group">💾 本地备份</p>
+          <div class="bk-list">
+            <div v-for="bk in backups.local" :key="'l-' + bk.name" class="bk-item">
+              <span class="bk-name">🕐 {{ bk.time }}</span>
+              <span class="bk-size">{{ formatSize(bk.size) }}</span>
+            </div>
+          </div>
+        </template>
+        <template v-if="webdavEnabled">
+          <p class="bk-group">☁️ 坚果云备份</p>
+          <p v-if="!webdavOk" class="bk-hint">⚠️ {{ webdavReason }}</p>
+          <p v-else-if="!backups.webdav.length" class="bk-hint">云端暂无备份记录，下次「立即备份」后自动上传</p>
+          <div v-else class="bk-list">
+            <div v-for="bk in backups.webdav" :key="'w-' + bk.name" class="bk-item">
+              <span class="bk-name">🕐 {{ bk.time }}</span>
+              <span class="bk-size">—</span>
+            </div>
+          </div>
+        </template>
+      </template>
     </div>
   </n-card>
 </template>
@@ -320,6 +345,24 @@ async function handleTest() {
   font-size: 13px;
   color: var(--admin-muted);
   padding: 12px 0;
+}
+.bk-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* 备份来源分组小标题（本地 / 坚果云） */
+.bk-group {
+  margin: 4px 0 0;
+  font-size: clamp(12px, 1.5vw, 13px);
+  font-weight: 600;
+  color: var(--pop);
+}
+/* 云端查询失败 / 空记录提示 */
+.bk-hint {
+  margin: 4px 0 0;
+  font-size: clamp(12px, 1.5vw, 13px);
+  color: var(--cherry);
 }
 .bk-list {
   display: flex;

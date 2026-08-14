@@ -630,9 +630,9 @@ export async function fetchPageTitle(req, res) {
         return jsonError(res, '该地址不允许访问（内网地址）');
       }
 
-      // 请求页面 HTML，超时 5 秒
+      // 请求页面 HTML，超时 10 秒（与前端 axios 超时对齐，避免前端先断导致提示不一致；原 5 秒过短，部分国内站点响应较慢会误报失败）
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
+      const timeout = setTimeout(() => controller.abort(), 10000);
 
       let response;
       try {
@@ -716,7 +716,10 @@ export async function fetchPageTitle(req, res) {
   } catch (err) {
     const reason = err.name === 'AbortError' ? '请求超时' : err.message;
     console.log(`[${new Date().toISOString()}] [书签] [获取标题] [失败] ${url} ${reason}`);
-    // 不向客户端泄露内部错误细节，仅输出到日志
+    // 超时是国内网络常见情况（站点被墙/响应慢），给出明确提示；其他错误不泄露内部细节
+    if (err.name === 'AbortError') {
+      return jsonError(res, '站点响应超时，可能被墙或访问过慢');
+    }
     return jsonError(res, '获取标题失败，请稍后重试');
   }
 }
