@@ -5,7 +5,7 @@
  *   分类加密（locked）→ 锁定占位"该分类已加密"，不显示书签列表
  *   所有链接加密（allLinksLocked）→ 显示书签列表（每个链接以锁定样式）+ 顶部提示"所有链接已加密"
  */
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 import LinkItem from './LinkItem.vue';
 import { resolveColor } from '../../composables/useColor.js';
 import { useResponsive } from '../../composables/useResponsive.js';
@@ -21,6 +21,14 @@ const emit = defineEmits(['open', 'unlock']);
 
 /** 移动端检测（<768px，与 CategoryGrid 单列断点一致） */
 const { isMobile } = useResponsive();
+
+/** 紧凑视图窄屏断点（<480px 时链接为 2 列，对应 .links-compact 的媒体查询；其余宽度为 3 列） */
+const isNarrow = ref(window.innerWidth < 480);
+function onResize() {
+  isNarrow.value = window.innerWidth < 480;
+}
+onMounted(() => window.addEventListener('resize', onResize));
+onUnmounted(() => window.removeEventListener('resize', onResize));
 
 /** 分类背景色（兼容预设名称和 HEX 值） */
 const bgColor = computed(() => resolveColor(props.category.bg_color));
@@ -40,52 +48,60 @@ const linkCount = computed(() => String(props.category.links?.length || 0).padSt
 /** 入场动画延迟 */
 const animDelay = computed(() => `${0.36 + props.index * 0.08}s`);
 
-/* ========== 列表视图折叠：超过阈值时默认收起，点击展开 ========== */
-/** 桌面端列表视图（8 列）默认展示的链接数量阈值（对应 4 行，超过 4 行才折叠） */
+/* ========== 分类折叠：card / compact 展示六排，list 按原阈值，超限点击展开 ========== */
+/** list 视图折叠阈值：桌面 8 列 4 行 = 32 条；移动端单列 10 行 = 10 条（现状不变） */
 const LIST_COLLAPSE_THRESHOLD_DESKTOP = 32;
-/** 移动端列表视图（单列）默认展示的链接数量阈值（对应 10 行） */
 const LIST_COLLAPSE_THRESHOLD_MOBILE = 10;
+/** card / compact 视图默认展示行数（六排） */
+const MAX_ROWS_CARD_COMPACT = 6;
 
-/** 当前是否展开（仅 list 视图生效） */
-const listExpanded = ref(false);
+/** card / compact 视图每行列数（条数 = 行数 × 列数）：compact ≤480px 为 2 列，其余 3 列；card 固定 2 列 */
+const columnsPerRow = computed(() => {
+  if (props.viewMode === 'card') return 2;
+  return isNarrow.value ? 2 : 3;
+});
+
+/** 当前是否展开（list / card / compact 视图生效） */
+const expanded = ref(false);
 
 /** 切换视图模式时重置展开状态 */
 watch(() => props.viewMode, () => {
-  listExpanded.value = false;
+  expanded.value = false;
 });
 
 /** 链接总数 */
 const totalLinks = computed(() => props.category.links?.length || 0);
 
-/** 折叠阈值：移动端单列时更小 */
-const listCollapseThreshold = computed(() =>
-  isMobile.value ? LIST_COLLAPSE_THRESHOLD_MOBILE : LIST_COLLAPSE_THRESHOLD_DESKTOP
-);
+/** 折叠阈值（条数）：list 按原阈值；card / compact 按六排 × 每行列数换算 */
+const collapseThreshold = computed(() => {
+  if (props.viewMode === 'list') {
+    return isMobile.value ? LIST_COLLAPSE_THRESHOLD_MOBILE : LIST_COLLAPSE_THRESHOLD_DESKTOP;
+  }
+  return MAX_ROWS_CARD_COMPACT * columnsPerRow.value;
+});
 
-/** 是否需要在列表视图下折叠（链接数超过阈值且当前为 list 模式） */
-const needCollapseInList = computed(() =>
-  props.viewMode === 'list' && totalLinks.value > listCollapseThreshold.value
-);
+/** 是否需要折叠（链接数超过阈值） */
+const needCollapse = computed(() => totalLinks.value > collapseThreshold.value);
 
 /** 实际渲染的链接列表（折叠时只取前 N 个） */
 const visibleLinks = computed(() => {
   const links = props.category.links || [];
-  if (needCollapseInList.value && !listExpanded.value) {
-    return links.slice(0, listCollapseThreshold.value);
+  if (needCollapse.value && !expanded.value) {
+    return links.slice(0, collapseThreshold.value);
   }
   return links;
 });
 
 /** 折叠时被隐藏的链接数量 */
 const hiddenCount = computed(() =>
-  needCollapseInList.value && !listExpanded.value
-    ? totalLinks.value - listCollapseThreshold.value
+  needCollapse.value && !expanded.value
+    ? totalLinks.value - collapseThreshold.value
     : 0
 );
 
 /** 切换展开/收起 */
-function toggleListExpand() {
-  listExpanded.value = !listExpanded.value;
+function toggleExpand() {
+  expanded.value = !expanded.value;
 }
 </script>
 
@@ -128,14 +144,14 @@ function toggleListExpand() {
         />
       </div>
 
-      <!-- 列表视图折叠：展开/收起按钮 -->
+      <!-- 分类折叠：展开/收起按钮（list / card / compact 视图共用） -->
       <button
-        v-if="needCollapseInList"
+        v-if="needCollapse"
         class="list-expand-btn"
-        :class="{ 'is-expanded': listExpanded }"
-        @click="toggleListExpand"
+        :class="{ 'is-expanded': expanded }"
+        @click="toggleExpand"
       >
-        <span v-if="!listExpanded">展开 +{{ hiddenCount }}</span>
+        <span v-if="!expanded">展开 +{{ hiddenCount }}</span>
         <span v-else>收起</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
           <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
