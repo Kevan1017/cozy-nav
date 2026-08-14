@@ -124,6 +124,13 @@ export const useDataStore = defineStore('data', () => {
     return res;
   }
 
+  /** 标记/取消标记常用书签 */
+  async function toggleFavorite(id, favorite) {
+    const res = await linkApi.toggleFavorite(id, favorite);
+    await fetchCategories();
+    return res;
+  }
+
   /** 切换分类锁定状态 */
   async function toggleCategoryLock(id, locked) {
     const res = await categoryApi.toggleLock(id, locked);
@@ -159,7 +166,7 @@ export const useDataStore = defineStore('data', () => {
     categories, isLoading, pinnedLinks, allLinks,
     fetchCategories, ensurePublicLoaded, createCategory, updateCategory, deleteCategory,
     updateCategoriesOrder,
-    createLink, updateLink, deleteLink, togglePin,
+    createLink, updateLink, deleteLink, togglePin, toggleFavorite,
     toggleCategoryLock, toggleLinkLock, batchMoveLinks,
   };
 });

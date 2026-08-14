@@ -560,7 +560,7 @@ onMounted(() => {
     <!-- ============ 回收站（子组件） ============ -->
     <CategoryTrashTable v-if="trashMode" @close="closeTrash" />
 
-    <!-- ============ 新建/编辑 Modal ============ -->
+    <!-- ============ 新建/编辑弹窗 ============ -->
     <n-modal
       v-model:show="modalShow"
       :mask-closable="true"

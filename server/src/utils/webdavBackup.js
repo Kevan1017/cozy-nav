@@ -95,6 +95,80 @@ function statusMessage(status) {
   return `HTTP ${status}`;
 }
 
+/** PROPFIND 请求体（allprop） */
+const PROPFIND_BODY =
+  '<?xml version="1.0" encoding="utf-8"?><D:propfind xmlns:D="DAV:"><D:allprop/></D:propfind>';
+
+/** 归一化 href：去掉尾部斜杠，便于比较 */
+const normHref = (h) => h.replace(/\/+$/, '');
+
+/** PROPFIND 请求，返回 { ok, xml, status }；失败 ok=false */
+async function propfindText(dirUrl, headers, depth = '1') {
+  const dir = dirUrl.endsWith('/') ? dirUrl : `${dirUrl}/`;
+  const res = await fetch(dir, {
+    method: 'PROPFIND',
+    headers: { ...headers, Depth: depth, 'Content-Type': 'application/xml' },
+    body: PROPFIND_BODY,
+    signal: AbortSignal.timeout(TIMEOUT_SMALL),
+  });
+  if (!res.ok && res.status !== 207) {
+    return { ok: false, status: res.status };
+  }
+  return { ok: true, status: res.status, xml: await res.text() };
+}
+
+/** 解析 multistatus XML → [{href, path, name, size, isCollection}]（兼容不同命名空间前缀） */
+function parseMultistatus(xml) {
+  const blocks = [];
+  const blockRe = /<(?:\w+:)?response>([\s\S]*?)<\/(?:\w+:)?response>/g;
+  let m;
+  while ((m = blockRe.exec(xml))) {
+    const block = m[1];
+    const href = block.match(/<(?:\w+:)?href>([^<]+)<\/(?:\w+:)?href>/)?.[1] || '';
+    if (!href) continue;
+    const path = decodeURIComponent(href).split('/').filter(Boolean).join('/');
+    const sizeMatch = block.match(/<(?:\w+:)?getcontentlength>([^<]+)<\/(?:\w+:)?getcontentlength>/);
+    const size = sizeMatch ? parseInt(sizeMatch[1], 10) : null;
+    blocks.push({
+      href: normHref(href),
+      path,
+      name: path.split('/').pop() || '',
+      size: Number.isFinite(size) && size > 0 ? size : null,
+      isCollection: /<(?:\w+:)?collection\s*\/?>/.test(block),
+    });
+  }
+  return blocks;
+}
+
+/**
+ * 列出坚果云 WebDAV 上的备份快照（backup-* 目录名，按时间倒序）
+ * 只列名称不做大小统计：坚果云目录不返回大小，逐层下钻会触发限流（BlockedTemporarily）
+ * @param {object} cfg - {url, user, pass, path}
+ * @returns {Promise<{ok:boolean, names?:string[], reason?:string}>}
+ */
+export async function listWebdavBackups({ url, user, pass, path = '' } = {}) {
+  const base = normalizeBase(url);
+  if (!base || !user || !pass) return { ok: false, reason: 'WebDAV 配置不完整' };
+  const headers = { Authorization: authHeader(user, pass) };
+  try {
+    const r = await propfindText(remoteUrl(base, path), headers, '1');
+    if (!r.ok) {
+      // 区分限流与其他失败，便于前端给出明确提示
+      const reason = r.status === 503 ? '坚果云接口繁忙（限流），请稍后刷新重试' : `坚果云接口异常（HTTP ${r.status}）`;
+      console.log(`[${new Date().toISOString()}] [备份] [WebDAV] [列表] 获取云端记录失败：${reason}`);
+      return { ok: false, reason };
+    }
+    const names = parseMultistatus(r.xml)
+      .filter((b) => b.name.startsWith('backup-'))
+      .map((b) => b.name)
+      .sort()
+      .reverse();
+    return { ok: true, names };
+  } catch (err) {
+    return { ok: false, reason: err.message };
+  }
+}
+
 /**
  * 上传本地备份快照到 WebDAV（含远端旧快照清理）
  * @param {object} opts

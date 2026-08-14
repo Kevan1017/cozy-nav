@@ -140,6 +140,17 @@ async function togglePin(link) {
   }
 }
 
+/** 标记/取消标记常用书签（无数量上限，独立于置顶） */
+async function toggleFavorite(link) {
+  const willFav = !link.is_favorite;
+  try {
+    await dataStore.toggleFavorite(link.id, willFav);
+    message.success(willFav ? '已标记为常用' : '已取消常用标记');
+  } catch (e) {
+    message.warning(e.message || '操作失败');
+  }
+}
+
 function askDelete(link) {
   dialog.warning({
     title: '确认删除书签',
@@ -472,6 +483,16 @@ function renderPin(link) {
   ]);
 }
 
+/** 渲染常用列：星标切换按钮（无上限，独立于置顶） */
+function renderFavorite(link) {
+  return h(NButton, {
+    size: 'tiny',
+    quaternary: true,
+    type: link.is_favorite ? 'warning' : 'default',
+    onClick: () => toggleFavorite(link),
+  }, () => link.is_favorite ? '★ 常用' : '☆ 标记');
+}
+
 /** 渲染健康状态列：颜色圆点 + 检测链接按钮；tooltip 汇总检测说明/连续失败/证书剩余天数 */
 function renderHealth(link) {
   const hg = healthTag(link);
@@ -563,6 +584,10 @@ const tableColumns = computed(() => {
     {
       title: '置顶', key: 'pin', width: 96, align: 'center',
       render: (row) => renderPin(row),
+    },
+    {
+      title: '常用', key: 'is_favorite', width: 86, align: 'center',
+      render: (row) => renderFavorite(row),
     },
   ];
 
@@ -839,6 +864,12 @@ watch(
             <n-button
               size="small"
               quaternary
+              :type="link.is_favorite ? 'warning' : 'default'"
+              @click="toggleFavorite(link)"
+            >{{ link.is_favorite ? '★ 常用' : '☆ 常用' }}</n-button>
+            <n-button
+              size="small"
+              quaternary
               type="info"
               :loading="checkingIds.has(link.id)"
               :disabled="!isHttpUrl(link.url)"
@@ -997,6 +1028,23 @@ watch(
 .filter-search {
   flex: 1;
   min-width: 0;
+}
+/* 移动端筛选栏：3 个下拉等分一行换行排列 + 搜索框占满整行，避免横向溢出 */
+@media (max-width: 1023px) {
+  .filter-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .filter-cat,
+  .filter-health,
+  .filter-pin {
+    flex: 1 1 calc((100% - 16px) / 3);
+    width: auto;
+    min-width: 0;
+  }
+  .filter-search {
+    flex: 1 1 100%;
+  }
 }
 
 /* 头像 */

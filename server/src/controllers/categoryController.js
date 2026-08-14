@@ -4,6 +4,7 @@
 import jwt from 'jsonwebtoken';
 import db from '../db/index.js';
 import { jsonSuccess, jsonError } from '../utils/response.js';
+import { writeLog, LOG_MODULE, LOG_ACTION } from '../utils/operationLogger.js';
 
 /**
  * 检查保险库是否已解锁（通过 X-Vault-Token 请求头）
@@ -74,8 +75,8 @@ export function getCategories(req, res) {
   // 管理员接口返回完整字段（后台表格展示 favicon 状态/访问量/健康状态）
   // 前台公开接口仅返回渲染所需字段，600+ 链接时显著减少 payload
   const linkFields = isAdmin
-    ? 'id, category_id, name, url, domain, avatar_text, avatar_color, is_pinned, pin_order, sort_order, is_locked, favicon_path, favicon_status, last_visited, visit_count, health_status, last_check_at, health_note, created_at'
-    : 'id, category_id, name, url, domain, avatar_text, avatar_color, is_pinned, pin_order, sort_order, is_locked, favicon_path, last_visited, created_at';
+    ? 'id, category_id, name, url, domain, avatar_text, avatar_color, is_pinned, pin_order, sort_order, is_locked, is_favorite, favicon_path, favicon_status, last_visited, visit_count, health_status, last_check_at, health_note, created_at'
+    : 'id, category_id, name, url, domain, avatar_text, avatar_color, is_pinned, pin_order, sort_order, is_locked, is_favorite, favicon_path, last_visited, created_at';
 
   const links = db.prepare(`
     SELECT ${linkFields}
@@ -168,6 +169,13 @@ export function createCategory(req, res) {
   const newCategory = db.prepare('SELECT * FROM categories WHERE id = ?').get(result.lastInsertRowid);
 
   console.log(`[${new Date().toISOString()}] [分类] [新增] [成功] ${name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.CATEGORY,
+    action: LOG_ACTION.CREATE,
+    detail: `新建分类：${name}`,
+    meta: { id: Number(result.lastInsertRowid) },
+  }, req);
 
   return jsonSuccess(res, newCategory, '创建成功');
 }
@@ -201,6 +209,13 @@ export function updateCategory(req, res) {
   const updated = db.prepare('SELECT * FROM categories WHERE id = ?').get(id);
 
   console.log(`[${new Date().toISOString()}] [分类] [编辑] [成功] ${name || existing.name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.CATEGORY,
+    action: LOG_ACTION.UPDATE,
+    detail: `编辑分类：${name || existing.name}`,
+    meta: { id: Number(id) },
+  }, req);
 
   return jsonSuccess(res, updated, '更新成功');
 }
@@ -227,6 +242,13 @@ export function deleteCategory(req, res) {
   const deletedLinksCount = result.changes;
 
   console.log(`[${now}] [分类] [删除] [成功] ${existing.name} (级联删除 ${deletedLinksCount} 个书签)`);
+  // 操作日志：记录级联删除的书签数量，批量异常删除可事后追溯
+  writeLog({
+    module: LOG_MODULE.CATEGORY,
+    action: LOG_ACTION.DELETE,
+    detail: `删除分类：${existing.name}（级联删除 ${deletedLinksCount} 个书签）`,
+    meta: { id: Number(id), deletedLinks: deletedLinksCount },
+  }, req);
 
   return jsonSuccess(res, { deletedLinks: deletedLinksCount }, `删除成功，已级联删除 ${deletedLinksCount} 个书签`);
 }
@@ -280,6 +302,13 @@ export function restoreCategory(req, res) {
   db.prepare('UPDATE categories SET deleted_at = NULL WHERE id = ?').run(id);
 
   console.log(`[${new Date().toISOString()}] [分类] [恢复] [成功] ${existing.name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.CATEGORY,
+    action: LOG_ACTION.RESTORE,
+    detail: `恢复分类：${existing.name}`,
+    meta: { id: Number(id) },
+  }, req);
 
   return jsonSuccess(res, null, '已恢复');
 }
@@ -305,6 +334,13 @@ export function purgeCategory(req, res) {
   db.prepare('DELETE FROM categories WHERE id = ?').run(id);
 
   console.log(`[${new Date().toISOString()}] [分类] [彻底删除] [成功] ${existing.name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.CATEGORY,
+    action: LOG_ACTION.DELETE,
+    detail: `彻底删除分类：${existing.name}`,
+    meta: { id: Number(id) },
+  }, req);
 
   return jsonSuccess(res, null, '已彻底删除');
 }
@@ -344,6 +380,13 @@ export function toggleCategoryLock(req, res) {
   db.prepare('UPDATE admin SET lock_version = lock_version + 1 WHERE id = 1').run();
 
   console.log(`[${now}] [分类] [锁定] [成功] ${existing.name} -> ${locked ? '锁定' : '解锁'}`);
+  // 操作日志：分类锁定/解锁留痕（保险库敏感操作）
+  writeLog({
+    module: LOG_MODULE.CATEGORY,
+    action: LOG_ACTION.TOGGLE,
+    detail: `${locked ? '锁定' : '解锁'}分类：${existing.name}`,
+    meta: { id: Number(id), locked: !!locked },
+  }, req);
 
   return jsonSuccess(res, { id: Number(id), is_locked: newLocked }, locked ? '已加密' : '已解密');
 }

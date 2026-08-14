@@ -15,6 +15,7 @@ import {
   restoreLink,
   purgeLink,
   togglePin,
+  toggleFavorite,
   toggleLinkLock,
   fetchFaviconSync,
   fetchPageTitle,
@@ -157,6 +158,8 @@ router.post(
     body('note').optional().isString().isLength({ max: 200 }).withMessage('备注不能超过200字'),
     // force：重复链接检测命中时，前端确认后传 true 强制保存
     body('force').optional().isBoolean().withMessage('force必须为布尔值'),
+    // is_favorite：是否标记为常用书签
+    body('is_favorite').optional().isBoolean().withMessage('is_favorite必须为布尔值'),
   ],
   validate,
   createLink
@@ -183,6 +186,8 @@ router.put(
     body('note').optional().isString().isLength({ max: 200 }).withMessage('备注不能超过200字'),
     // force：重复链接检测命中时，前端确认后传 true 强制保存
     body('force').optional().isBoolean().withMessage('force必须为布尔值'),
+    // is_favorite：是否标记为常用书签
+    body('is_favorite').optional().isBoolean().withMessage('is_favorite必须为布尔值'),
   ],
   validate,
   updateLink
@@ -228,6 +233,18 @@ router.put(
   ],
   validate,
   togglePin
+);
+
+// PUT /api/links/:id/favorite - 标记/取消标记常用书签（独立于置顶）
+router.put(
+  '/:id/favorite',
+  authMiddleware,
+  [
+    param('id').isInt({ min: 1 }).withMessage('书签 ID 非法'),
+    body('favorite').isBoolean().withMessage('favorite必须为布尔值'),
+  ],
+  validate,
+  toggleFavorite
 );
 
 // PUT /api/links/:id/lock - 切换书签锁定状态

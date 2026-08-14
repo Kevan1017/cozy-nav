@@ -51,7 +51,7 @@ export const DEFAULT_NOTIFICATION_CONFIG = {
       onSuccess: true,         // 备份成功时推送
       onFailure: true,         // 备份失败时推送
       titleTemplate: '🛡️ 数据备份{result}',
-      bodyTemplate: '文件：{file}\n大小：{size}\n{reason}时间：{time}',
+      bodyTemplate: '文件：{file}\n大小：{size}\n{reason}时间：{time}\n坚果云：{webdav}',
     },
   },
 };
@@ -68,7 +68,8 @@ export const EVENT_PLACEHOLDERS = {
     { key: '{time}', desc: '推送时间' },
   ],
   backup: [
-    { key: '{result}', desc: '备份结果（成功/失败）' },
+    { key: '{result}', desc: '本地备份结果（成功/失败）' },
+    { key: '{webdav}', desc: '坚果云上传结果（成功/失败（原因）/未启用）' },
     { key: '{file}', desc: '快照文件名' },
     { key: '{size}', desc: '快照大小' },
     { key: '{reason}', desc: '失败原因（成功时为空）' },
@@ -253,40 +254,47 @@ const RENDERERS = {
     const issues = stat.fail || 0;
     if (event.strategy !== 'always' && issues < event.minIssues) return null;
     const timeStr = new Date().toLocaleString('zh-CN', { hour12: false });
+    // issues 由渲染器单独计算，渲染标题时需并入数据，否则 {issues} 会替换为空
+    const map = { ...stat, issues };
     // 全部正常时标题固定，避免"发现 0 条异常"的奇怪文案
     const title = issues > 0
-      ? renderTemplate(event.titleTemplate || '🩺 巡检发现 {issues} 条异常', stat, timeStr)
+      ? renderTemplate(event.titleTemplate || '🩺 巡检发现 {issues} 条异常', map, timeStr)
       : '🩺 巡检完成（全部正常）';
     const desp = renderTemplate(
       event.bodyTemplate || '正常 {ok} · 需代理 {blocked} · 打不开 {fail} · 跳过 {skip}\n\n检测时间：{time}',
-      stat,
+      map,
       timeStr
     );
     return { title, desp };
   },
 
-  /** 备份结果：按成功/失败开关决定是否推送，WebDAV 云端状态附在正文末尾 */
+  /** 备份结果：按成功/失败开关决定是否推送，坚果云上传结果经 {webdav} 占位符真实呈现 */
   backup: (event, data) => {
     const ok = !!data.ok;
     if (ok && !event.onSuccess) return null;
     if (!ok && !event.onFailure) return null;
     const timeStr = new Date().toLocaleString('zh-CN', { hour12: false });
+    const w = data.webdav;
+    // 坚果云占位符：结合真实上传结果动态生成，未启用 WebDAV 时显示"未启用"
+    const webdavText = w
+      ? (w.ok ? `成功（已上传 ${w.uploaded ?? 0} 个文件）` : `失败（${w.reason || '未知原因'}）`)
+      : '未启用';
     const map = {
       result: ok ? '成功' : '失败',
+      webdav: webdavText,
       file: data.file || '',
       size: data.size || '',
       reason: ok ? '' : (data.reason || ''),
     };
     const title = renderTemplate(event.titleTemplate || '🛡️ 数据备份{result}', map, timeStr);
     let desp = renderTemplate(
-      event.bodyTemplate || '文件：{file}\n大小：{size}\n{reason}时间：{time}',
+      event.bodyTemplate || '文件：{file}\n大小：{size}\n{reason}时间：{time}\n坚果云：{webdav}',
       map,
       timeStr
     );
-    // 云端坚果云上传状态（未启用 WebDAV 时不展示）
-    if (data.webdav) {
-      const w = data.webdav;
-      desp += `\n云端坚果云：${w.ok ? `已上传（${w.uploaded ?? 0} 个文件）` : `上传失败（${w.reason || '未知原因'}）`}`;
+    // 兼容已保存的旧模板：模板中未使用 {webdav} 占位符时，把云端状态追加到正文末尾
+    if (w && !event.bodyTemplate.includes('{webdav}')) {
+      desp += `\n坚果云：${webdavText}`;
     }
     return { title, desp };
   },
@@ -294,7 +302,7 @@ const RENDERERS = {
 
 /** 将模板中的 {占位符} 替换为实际值（时间占位符统一处理） */
 function renderTemplate(tpl, map, timeStr) {
-  return tpl.replace(/\{(total|ok|blocked|fail|skip|issues|result|file|size|reason|time)\}/g, (match, key) => {
+  return tpl.replace(/\{(total|ok|blocked|fail|skip|issues|result|webdav|file|size|reason|time)\}/g, (match, key) => {
     if (key === 'time') return timeStr;
     return map[key] ?? '';
   });

@@ -1,6 +1,7 @@
 import db from '../db/index.js';
 import { jsonSuccess, jsonError } from '../utils/response.js';
 import { normalizeUrl } from '../utils/urlNormalize.js';
+import { writeLog, LOG_MODULE, LOG_ACTION } from '../utils/operationLogger.js';
 
 /**
  * 导出 JSON 格式数据
@@ -39,6 +40,7 @@ export function exportJSON(req, res) {
           avatar_color: link.avatar_color,
           is_pinned: link.is_pinned,
           pin_order: link.pin_order,
+          is_favorite: link.is_favorite,
           sort_order: link.sort_order,
         })),
       });
@@ -47,6 +49,14 @@ export function exportJSON(req, res) {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="cozy-nav-export.json"');
     res.send(JSON.stringify(result, null, 2));
+    // 操作日志：导出为敏感操作，留痕便于事后追溯数据外流
+    const linkCount = result.categories.reduce((sum, c) => sum + c.links.length, 0);
+    writeLog({
+      module: LOG_MODULE.IMPORT,
+      action: LOG_ACTION.EXPORT,
+      detail: `导出书签数据（JSON）：${result.categories.length} 个分类、${linkCount} 个书签`,
+      meta: { format: 'json', categories: result.categories.length, links: linkCount },
+    }, req);
   } catch (e) {
     // 不向客户端泄露内部错误细节，仅输出到日志
     console.log(`[${new Date().toISOString()}] [导出] [JSON] [失败] ${e.message}`);
@@ -97,6 +107,13 @@ export function exportBookmarks(req, res) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="cozy-nav-bookmarks.html"');
     res.send(html);
+    // 操作日志：导出为敏感操作，留痕便于事后追溯数据外流
+    writeLog({
+      module: LOG_MODULE.IMPORT,
+      action: LOG_ACTION.EXPORT,
+      detail: `导出书签数据（HTML）：${categories.length} 个分类`,
+      meta: { format: 'html', categories: categories.length },
+    }, req);
   } catch (e) {
     // 不向客户端泄露内部错误细节，仅输出到日志
     console.log(`[${new Date().toISOString()}] [导出] [HTML] [失败] ${e.message}`);
@@ -194,20 +211,21 @@ export function importJSON(req, res) {
 
           if (existingLink && strategy === 'overwrite') {
             db.prepare(
-              'UPDATE links SET name = ?, domain = ?, avatar_text = ?, avatar_color = ? WHERE id = ?'
+              'UPDATE links SET name = ?, domain = ?, avatar_text = ?, avatar_color = ?, is_favorite = ? WHERE id = ?'
             ).run(
               link.name,
               extractDomain(link.url),
               link.avatar_text || link.name[0],
               link.avatar_color || 'slate',
+              link.is_favorite ? 1 : 0,
               existingLink.id
             );
             stats.linksUpdated++;
           } else {
             // 新增链接（未显式传排序权重时自动排到该分类末尾）
             db.prepare(
-              `INSERT INTO links (category_id, name, url, domain, avatar_text, avatar_color, is_pinned, sort_order, url_normalized)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              `INSERT INTO links (category_id, name, url, domain, avatar_text, avatar_color, is_pinned, is_favorite, sort_order, url_normalized)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             ).run(
               catId,
               link.name,
@@ -216,6 +234,7 @@ export function importJSON(req, res) {
               link.avatar_text || link.name[0],
               link.avatar_color || 'slate',
               link.is_pinned || 0,
+              link.is_favorite ? 1 : 0,
               link.sort_order ?? db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM links WHERE category_id = ? AND deleted_at IS NULL').get(catId).next,
               normalized
             );
@@ -226,6 +245,17 @@ export function importJSON(req, res) {
     }
 
     db.exec('COMMIT');
+    // 操作日志：记录导入结果（含数量，异常大批量导入可事后追溯）
+    writeLog({
+      module: LOG_MODULE.IMPORT,
+      action: LOG_ACTION.IMPORT,
+      detail: `导入书签（JSON）：新建 ${stats.linksCreated} 个链接、更新 ${stats.linksUpdated} 个、跳过 ${stats.linksSkipped} 个、新建 ${stats.categoriesCreated} 个分类（策略：${strategy}）`,
+      meta: {
+        format: 'json', strategy,
+        categoriesCreated: stats.categoriesCreated, categoriesReused: stats.categoriesReused,
+        linksCreated: stats.linksCreated, linksUpdated: stats.linksUpdated, linksSkipped: stats.linksSkipped,
+      },
+    }, req);
     jsonSuccess(res, stats, `导入成功：新建 ${stats.categoriesCreated} 个分类，新增 ${stats.linksCreated} 个链接，更新 ${stats.linksUpdated} 个，跳过 ${stats.linksSkipped} 个`);
   } catch (e) {
     db.exec('ROLLBACK');
@@ -333,6 +363,17 @@ export function importBookmarks(req, res) {
     }
 
     db.exec('COMMIT');
+    // 操作日志：记录导入结果（含数量，异常大批量导入可事后追溯）
+    writeLog({
+      module: LOG_MODULE.IMPORT,
+      action: LOG_ACTION.IMPORT,
+      detail: `导入书签（HTML）：新建 ${stats.linksCreated} 个链接、更新 ${stats.linksUpdated} 个、跳过 ${stats.linksSkipped} 个、新建 ${stats.categoriesCreated} 个分类（策略：${strategy}）`,
+      meta: {
+        format: 'html', strategy,
+        categoriesCreated: stats.categoriesCreated, categoriesReused: stats.categoriesReused,
+        linksCreated: stats.linksCreated, linksUpdated: stats.linksUpdated, linksSkipped: stats.linksSkipped,
+      },
+    }, req);
     jsonSuccess(res, stats, `导入成功：新建 ${stats.categoriesCreated} 个分类，新增 ${stats.linksCreated} 个链接，更新 ${stats.linksUpdated} 个，跳过 ${stats.linksSkipped} 个`);
   } catch (e) {
     db.exec('ROLLBACK');

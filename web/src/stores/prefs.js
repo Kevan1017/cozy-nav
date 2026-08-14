@@ -49,6 +49,10 @@ export const usePrefsStore = defineStore('prefs', () => {
   const festivalCountdownEnabled = ref(localStorage.getItem('festivalCountdownEnabled') !== '0');
   /** 闲置书签标记是否开启（默认关闭，与后端 idle_mark_enabled 默认 0 一致） */
   const idleMarkEnabled = ref(localStorage.getItem('idleMarkEnabled') === '1');
+  /** 前台置顶板块是否显示（默认开启，与后端 pin_strip_enabled 默认 1 一致） */
+  const pinStripEnabled = ref(localStorage.getItem('pinStripEnabled') !== '0');
+  /** 前台常用书签星标是否显示（默认开启，与后端 favorite_mark_enabled 默认 1 一致） */
+  const favoriteMarkEnabled = ref(localStorage.getItem('favoriteMarkEnabled') !== '0');
   /** 统计卡底部标语（可在后台编辑，默认英文手写体） */
   const statTagline = ref(localStorage.getItem('statTagline') || '— everything in its place —');
   /** 自定义配色覆盖层：{light:{--bg:'#xxx',...}, dark:{...}}，改过的项覆盖预设 */
@@ -144,6 +148,12 @@ export const usePrefsStore = defineStore('prefs', () => {
     }
     if (res.data.idle_mark_enabled !== undefined && res.data.idle_mark_enabled !== null) {
       idleMarkEnabled.value = !!res.data.idle_mark_enabled;
+    }
+    if (res.data.pin_strip_enabled !== undefined && res.data.pin_strip_enabled !== null) {
+      pinStripEnabled.value = !!res.data.pin_strip_enabled;
+    }
+    if (res.data.favorite_mark_enabled !== undefined && res.data.favorite_mark_enabled !== null) {
+      favoriteMarkEnabled.value = !!res.data.favorite_mark_enabled;
     }
     if (res.data.stat_tagline !== undefined && res.data.stat_tagline !== null) {
       statTagline.value = res.data.stat_tagline;
@@ -325,6 +335,24 @@ export const usePrefsStore = defineStore('prefs', () => {
     }
   }
 
+  /** 更新前台置顶板块显示开关（后台设置） */
+  async function updatePinStripEnabled(val) {
+    pinStripEnabled.value = val;
+    localStorage.setItem('pinStripEnabled', val ? '1' : '0');
+    if (localStorage.getItem('token')) {
+      await prefsApi.update({ pin_strip_enabled: val ? 1 : 0 });
+    }
+  }
+
+  /** 更新前台常用书签星标显示开关（后台设置） */
+  async function updateFavoriteMarkEnabled(val) {
+    favoriteMarkEnabled.value = val;
+    localStorage.setItem('favoriteMarkEnabled', val ? '1' : '0');
+    if (localStorage.getItem('token')) {
+      await prefsApi.update({ favorite_mark_enabled: val ? 1 : 0 });
+    }
+  }
+
   /** 更新统计卡标语 */
   async function updateStatTagline(val) {
     statTagline.value = val || '— everything in its place —';
@@ -403,6 +431,8 @@ export const usePrefsStore = defineStore('prefs', () => {
     localStorage.setItem('festivalEnabled', festivalEnabled.value ? '1' : '0');
     localStorage.setItem('festivalCountdownEnabled', festivalCountdownEnabled.value ? '1' : '0');
     localStorage.setItem('idleMarkEnabled', idleMarkEnabled.value ? '1' : '0');
+    localStorage.setItem('pinStripEnabled', pinStripEnabled.value ? '1' : '0');
+    localStorage.setItem('favoriteMarkEnabled', favoriteMarkEnabled.value ? '1' : '0');
     localStorage.setItem('statTagline', statTagline.value);
     localStorage.setItem('customTheme', JSON.stringify(customTheme.value));
     localStorage.setItem('siteTitle', siteTitle.value);
@@ -428,6 +458,8 @@ export const usePrefsStore = defineStore('prefs', () => {
     festivalEnabled,
     festivalCountdownEnabled,
     idleMarkEnabled,
+    pinStripEnabled,
+    favoriteMarkEnabled,
     statTagline,
     customTheme,
     siteTitle,
@@ -453,6 +485,8 @@ export const usePrefsStore = defineStore('prefs', () => {
     updateFestivalEnabled,
     updateFestivalCountdownEnabled,
     updateIdleMarkEnabled,
+    updatePinStripEnabled,
+    updateFavoriteMarkEnabled,
     updateStatTagline,
     updateCustomTheme,
     updateSiteBasic,

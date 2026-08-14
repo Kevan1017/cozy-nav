@@ -3,6 +3,7 @@
  */
 import db from '../db/index.js';
 import { jsonSuccess, jsonError } from '../utils/response.js';
+import { writeLog, LOG_MODULE, LOG_ACTION } from '../utils/operationLogger.js';
 
 /**
  * 获取启用的引擎列表（前台用）
@@ -57,6 +58,13 @@ export function createEngine(req, res) {
     const engine = db.prepare('SELECT * FROM search_engines WHERE id = ?').get(result.lastInsertRowid);
 
     console.log(`[${new Date().toISOString()}] [搜索引擎] [新增] [成功] ${name}`);
+    // 操作日志
+    writeLog({
+      module: LOG_MODULE.ENGINE,
+      action: LOG_ACTION.CREATE,
+      detail: `新建搜索引擎：${name}`,
+      meta: { id: Number(result.lastInsertRowid) },
+    }, req);
 
     return jsonSuccess(res, engine, '创建成功');
   } catch (e) {
@@ -103,6 +111,13 @@ export function updateEngine(req, res) {
     const engine = db.prepare('SELECT * FROM search_engines WHERE id = ?').get(id);
 
     console.log(`[${new Date().toISOString()}] [搜索引擎] [编辑] [成功] ${engine.name}`);
+    // 操作日志
+    writeLog({
+      module: LOG_MODULE.ENGINE,
+      action: LOG_ACTION.UPDATE,
+      detail: `编辑搜索引擎：${engine.name}`,
+      meta: { id: Number(id) },
+    }, req);
 
     return jsonSuccess(res, engine, '更新成功');
   } catch (e) {
@@ -128,6 +143,13 @@ export function deleteEngine(req, res) {
   db.prepare('UPDATE search_engines SET deleted_at = ? WHERE id = ?').run(new Date().toISOString(), id);
 
   console.log(`[${new Date().toISOString()}] [搜索引擎] [删除] [成功] ${existing.name}`);
+  // 操作日志
+  writeLog({
+    module: LOG_MODULE.ENGINE,
+    action: LOG_ACTION.DELETE,
+    detail: `删除搜索引擎：${existing.name}`,
+    meta: { id: Number(id) },
+  }, req);
 
   return jsonSuccess(res, null, '删除成功');
 }

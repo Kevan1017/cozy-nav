@@ -7,9 +7,10 @@
  */
 import db from '../db/index.js';
 import { jsonSuccess, jsonError } from '../utils/response.js';
-import { listBackups, parseBackupConfig, DEFAULT_BACKUP_CONFIG, DATA_DIR } from '../utils/backup.js';
+import { listBackups, parseBackupConfig, DEFAULT_BACKUP_CONFIG, DATA_DIR, formatBackupTime } from '../utils/backup.js';
 import { triggerBackupNow } from '../utils/scheduler.js';
-import { testWebDAVConnection } from '../utils/webdavBackup.js';
+import { testWebDAVConnection, listWebdavBackups } from '../utils/webdavBackup.js';
+import { writeLog, LOG_MODULE, LOG_ACTION } from '../utils/operationLogger.js';
 
 /**
  * 读取备份配置
@@ -50,6 +51,13 @@ export function updateBackupConfig(req, res) {
     `autoEnabled=${next.autoEnabled} retainCount=${next.retainCount} ` +
     `webdav=${next.webdav?.enabled ? '启用' : '关闭'}`
   );
+  // 操作日志：备份配置变更（含云端启停）留痕
+  writeLog({
+    module: LOG_MODULE.BACKUP,
+    action: LOG_ACTION.UPDATE,
+    detail: `保存备份配置：自动备份${next.autoEnabled ? '开启' : '关闭'}、保留 ${next.retainCount} 份、坚果云${next.webdav?.enabled ? '启用' : '关闭'}`,
+    meta: { autoEnabled: next.autoEnabled, retainCount: next.retainCount, webdavEnabled: !!next.webdav?.enabled },
+  }, req);
 
   return jsonSuccess(res, { ...next }, '备份配置已保存');
 }
@@ -60,6 +68,23 @@ export function updateBackupConfig(req, res) {
  */
 export async function runBackupNow(req, res) {
   const result = await triggerBackupNow();
+  // 操作日志：手动备份成败（含云端上传结果）留痕
+  const detail = result.skipped
+    ? `立即备份跳过：${result.reason}`
+    : result.ok
+      ? (result.webdav?.ok ? '立即备份完成（已上传坚果云）' : (result.webdav ? '立即备份完成（坚果云上传失败）' : '立即备份完成'))
+      : `立即备份失败：${result.reason || '未知错误'}`;
+  writeLog({
+    module: LOG_MODULE.BACKUP,
+    action: LOG_ACTION.RUN,
+    detail,
+    meta: {
+      file: result.file || null,
+      size: result.size || null,
+      skipped: !!result.skipped,
+      webdav: result.webdav ? { ok: !!result.webdav.ok, reason: result.webdav.reason || null } : null,
+    },
+  }, req);
   if (result.skipped) {
     return jsonSuccess(res, { skipped: true, reason: result.reason }, result.reason);
   }
@@ -89,6 +114,13 @@ export async function runBackupNow(req, res) {
 export async function testWebdav(req, res) {
   const { url, user, pass, path } = req.body?.webdav || {};
   const result = await testWebDAVConnection({ url, user, pass, path });
+  // 操作日志：WebDAV 连接测试留痕（含失败原因，便于排查云端配置问题）
+  writeLog({
+    module: LOG_MODULE.BACKUP,
+    action: LOG_ACTION.CHECK,
+    detail: result.ok ? '测试坚果云连接成功' : `测试坚果云连接失败：${result.reason || '未知原因'}`,
+    meta: { ok: !!result.ok, reason: result.reason || null },
+  }, req);
   if (result.ok) {
     return jsonSuccess(res, {}, '坚果云连接成功，可正常备份');
   }
@@ -96,11 +128,39 @@ export async function testWebdav(req, res) {
 }
 
 /**
- * 最近备份记录列表
+ * 最近备份记录列表（区分本地 / 坚果云云端）
  * GET /api/backup/list
+ * 返回 { local, webdav, webdavEnabled, webdavOk, webdavReason }
+ * - webdavEnabled=false：WebDAV 未启用或配置不完整，不查询云端
+ * - webdavEnabled=true 且 webdavOk=false：webdavReason 说明失败原因（限流/接口异常），前端据此提示
  */
-export function getBackupList(req, res) {
-  return jsonSuccess(res, listBackups());
+export async function getBackupList(req, res) {
+  const local = listBackups().map((b) => ({ ...b, source: 'local' }));
+
+  // 云端记录：仅当 WebDAV 已启用且配置完整时查询
+  const row = db.prepare('SELECT backup_config FROM preferences WHERE id = 1').get();
+  const cfg = parseBackupConfig(row?.backup_config);
+  const w = cfg?.webdav || {};
+  const webdavEnabled = !!(w.enabled && w.url && w.user && w.pass);
+  let webdav = [];
+  let webdavOk = true;
+  let webdavReason = '';
+  if (webdavEnabled) {
+    const r = await listWebdavBackups(w);
+    if (r.ok) {
+      webdav = r.names.map((name) => ({
+        name,
+        time: formatBackupTime(name),
+        size: null,
+        source: 'webdav',
+      }));
+    } else {
+      webdavOk = false;
+      webdavReason = r.reason || '获取云端记录失败';
+    }
+  }
+
+  return jsonSuccess(res, { local, webdav, webdavEnabled, webdavOk, webdavReason });
 }
 
 export { DEFAULT_BACKUP_CONFIG };
