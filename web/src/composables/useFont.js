@@ -37,11 +37,22 @@ const WEB_FONT_IMPORTS = {
 /** 已加载的字体集合（避免重复加载） */
 const loadedFonts = new Set();
 
+/** 字体 key → @font-face 家族名（unicode-range 分片的 family 值，用于 face.load 强制下载匹配） */
+const FONT_FAMILY_NAMES = {
+  system: 'Noto Sans SC',
+  kai: 'LXGW WenKai Mono',
+  serif: 'Noto Serif SC',
+};
+
+/** 预下载是否已触发（无论成败只触发一次） */
+let prefetchStarted = false;
+
 /**
  * 按需加载 web font（动态 import，仅触发一次），返回加载完成的 Promise
- * 字体 CSS 已被 vite 插件改写为 font-display: optional：
- *   - 字体在 100ms 内就绪（缓存命中）→ 本次渲染即用 web font，无抖动
- *   - 字体未就绪（冷启动）→ 本次用回退字体且不再替换，同样无 FOUT
+ * 字体 CSS 已被 vite 插件改写为 font-display: swap：
+ *   - 字体就绪（缓存命中）→ 本次渲染即用 web font，无抖动
+ *   - 字体未就绪（移动端冷启动）→ 先用回退字体渲染，字体下载完成后替换；
+ *     避免 optional 的 100ms 限制导致慢网络下字体永远不生效（Android 无楷体/宋体回退 → 切换无感）
  * 故无需手动预热字体数据（会强制下载全部分包，浪费带宽）
  * @param {string} fontFamily - system / kai / serif
  * @returns {Promise<void>|undefined} CSS 加载完成的 Promise（已加载过则返回 undefined）
@@ -53,6 +64,44 @@ export function loadWebFont(fontFamily) {
   return loader().catch(() => {
     loadedFonts.delete(fontFamily); // 失败允许重试，字体回退系统默认
   });
+}
+
+/**
+ * 首次交互后预下载其余字体（"交互后加载"策略）
+ * 新用户首屏只加载当前默认字体（system），避免与首屏资源抢带宽；
+ * 用户第一次点击/滚动/键盘输入时，后台开始下载尚未加载的字体，
+ * 等真正切换字体时基本已就绪、无需等待。事件触发后自动移除监听，只执行一次。
+ *
+ * 说明：unicode-range 分包下仅 import CSS 不会下载字体文件（浏览器只在文本
+ * 实际使用该字体时下载对应分片），故需在 CSS 注册完成后遍历 document.fonts，
+ * 对每个 face 调用 load() 强制下载字体分片，预下载才真正生效。
+ */
+export function prefetchFontsOnInteraction() {
+  if (prefetchStarted) return;
+  const pending = Object.keys(WEB_FONT_IMPORTS).filter((k) => !loadedFonts.has(k));
+  if (pending.length === 0) return;
+
+  const trigger = () => {
+    prefetchStarted = true;
+    window.removeEventListener('pointerdown', trigger);
+    window.removeEventListener('keydown', trigger);
+    window.removeEventListener('scroll', trigger, { passive: true });
+    // 并行加载字体 CSS，注册 @font-face 后再强制下载分片
+    Promise.all(pending.map(loadWebFont)).then(() => {
+      // wanted 是家族名集合（face.family 是 'LXGW WenKai Mono' 等家族名，不是字体 key）
+      const wanted = new Set(pending.map((k) => FONT_FAMILY_NAMES[k]).filter(Boolean));
+      for (const face of document.fonts) {
+        // face.family 可能带引号，去掉后与字体 key 匹配
+        if (wanted.has(face.family.replace(/['"]/g, ''))) {
+          try { face.load(); } catch { /* 单个分片失败不阻塞其余 */ }
+        }
+      }
+    });
+  };
+
+  window.addEventListener('pointerdown', trigger);
+  window.addEventListener('keydown', trigger);
+  window.addEventListener('scroll', trigger, { passive: true });
 }
 
 /**

@@ -5,7 +5,7 @@
  */
 import { ref, computed, onMounted, watch } from 'vue';
 import { enginesApi } from '../api/engines.js';
-import { prefsApi } from '../api/prefs.js';
+import { usePrefsStore } from '../stores/prefs.js';
 import { linkApi } from '../api/link.js';
 
 /** 引擎数据（从后端加载） */
@@ -13,15 +13,12 @@ const engineList = ref([]);
 const displayCount = ref(3);
 const enginesLoaded = ref(false);
 
-/** 加载引擎数据 */
-async function loadEngines() {
+/** 加载引擎数据（显示数量复用 prefs store 已拉取的偏好，避免重复请求 /api/preferences） */
+async function loadEngines(prefsStore) {
   try {
-    const [engRes, prefsRes] = await Promise.all([
-      enginesApi.list(),
-      prefsApi.get(),
-    ]);
+    const engRes = await enginesApi.list();
     engineList.value = engRes.data;
-    displayCount.value = prefsRes.data.engine_display_count || 3;
+    displayCount.value = prefsStore.engineDisplayCount || 3;
     enginesLoaded.value = true;
   } catch {
     // 降级：保留一个默认引擎避免搜索完全不可用
@@ -159,7 +156,7 @@ export function useSearch(getLinks) {
   // 组件挂载时加载引擎数据
   onMounted(() => {
     if (!enginesLoaded.value) {
-      loadEngines();
+      loadEngines(usePrefsStore());
     }
   });
 

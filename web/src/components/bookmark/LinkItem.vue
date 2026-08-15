@@ -65,10 +65,14 @@ function handleOpen() {
     </div>
   </div>
 
-  <!-- 正常书签 -->
-  <div v-else class="lk" :title="showIdle ? idleTip : undefined" @click="handleOpen">
-    <!-- 常用竖条：整个书签条目左侧金色竖条（不占布局宽度、不遮挡文本） -->
-    <span v-if="showFav" class="fav-bar" title="常用书签"></span>
+  <!-- 正常书签：常用标记为链接块左边框（金色），闲置标记沿用名称右侧内联时钟 -->
+  <div
+    v-else
+    class="lk"
+    :class="{ 'lk-fav': showFav }"
+    :title="showIdle ? idleTip : (showFav ? '常用书签' : undefined)"
+    @click="handleOpen"
+  >
     <!-- 有 favicon：用 FaviconImage（含加载失败回退字母头像） -->
     <FaviconImage
       v-if="link.favicon_path && !prefsStore.noImage"
@@ -94,7 +98,7 @@ function handleOpen() {
     <div class="txt">
       <div class="nm">
         <span class="nm-text">{{ link.name }}</span>
-        <!-- 闲置时钟：名称右侧内联（与常用竖条分居条目两端，互不遮挡） -->
+        <!-- 闲置时钟：名称右侧内联（与常用左边框分居两端，互不遮挡） -->
         <span v-if="showIdle" class="idle-mark" :title="idleTip">
           <svg
             viewBox="0 0 24 24"
@@ -136,6 +140,11 @@ function handleOpen() {
 .lk:hover {
   background: var(--link-hover, var(--card-solid));
   transform: translateY(-2px);
+}
+
+/* 常用标记：链接块左侧金色边框（所有视图统一，左边框不占布局、与内容互不遮挡） */
+.lk.lk-fav {
+  border-left: 3px solid var(--link-fav) !important;
 }
 
 .lk:active {
@@ -185,18 +194,6 @@ function handleOpen() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* 常用竖条：卡片左侧竖向金色条（绝对定位不占宽度，与闲置时钟分居两端） */
-.fav-bar {
-  position: absolute;
-  left: 2px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 22px;
-  border-radius: 2px;
-  background: var(--link-fav);
 }
 
 .dm {

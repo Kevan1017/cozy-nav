@@ -376,11 +376,6 @@ function toggleExpand() {
   display: none;
 }
 
-/* 图标平铺下常用竖条不适用（竖向居中布局），隐藏 */
-.links-dial :deep(.fav-bar) {
-  display: none;
-}
-
 /* 图标平铺下锁定条目保留"点击解锁查看"提示（.dm 默认被隐藏，此处恢复） */
 .links-dial :deep(.lk-locked .dm) {
   display: block;
