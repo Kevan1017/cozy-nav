@@ -7,6 +7,7 @@
  */
 import FaviconImage from '../ui/FaviconImage.vue';
 import { usePrefsStore } from '../../stores/prefs.js';
+import { linkApi } from '../../api/link.js';
 
 defineProps({
   links: { type: Array, default: () => [] },
@@ -14,6 +15,14 @@ defineProps({
 
 const emit = defineEmits(['open']);
 const prefsStore = usePrefsStore();
+
+/** 点击置顶书签：先异步埋点记录访问，再打开链接（与分类书签 LinkItem 一致） */
+function handleOpen(link) {
+  if (link?.id) {
+    linkApi.visit(link.id).catch(() => {});
+  }
+  emit('open', link.url);
+}
 
 /** 格式化序号 */
 function rankText(index) {
@@ -37,7 +46,7 @@ function rankText(index) {
         v-for="(link, index) in links"
         :key="link.id"
         class="pin-card"
-        @click="emit('open', link.url)"
+        @click="handleOpen(link)"
       >
         <div class="top-row">
           <FaviconImage
