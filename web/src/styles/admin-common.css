@@ -274,3 +274,23 @@ a.mob-name:hover {
 body:has(#dm:checked) .mob-meta {
   border-color: var(--admin-divider);
 }
+
+/* ---------- 页头副标题（naive-ui class 为 __subtitle，统一修复各页误写 __sub-title 不生效） ---------- */
+.page-header .n-page-header__subtitle,
+.op-log-header .n-page-header__subtitle {
+  color: var(--admin-muted);
+  font-size: 13px;
+}
+
+/* ---------- 小屏：页头标题与副标题纵向排列，避免长副标题挤压标题换行 ---------- */
+@media (max-width: 768px) {
+  .page-header .n-page-header__main,
+  .op-log-header .n-page-header__main {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .page-header .n-page-header__subtitle,
+  .op-log-header .n-page-header__subtitle {
+    margin-left: 0;
+  }
+}

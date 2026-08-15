@@ -996,11 +996,6 @@ watch(
   font-size: clamp(18px, 4vw, 24px);
   white-space: nowrap;
 }
-:deep(.n-page-header__sub-title) {
-  color: var(--admin-muted);
-  font-size: 13px;
-  white-space: nowrap;
-}
 
 /* 筛选栏 */
 .filter-card {

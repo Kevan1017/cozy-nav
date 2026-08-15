@@ -46,6 +46,8 @@
   --olive: #A8A848;
   --magenta: #B84898;
   --jade: #4FB888;
+  /* 板岩灰：导入/加密链接兜底色（后端默认 avatar_color = 'slate'） */
+  --slate: #7A8A98;
 
   /* 文字色系：暖棕灰 */
   --ink: #2A2418;
@@ -140,6 +142,8 @@ body:has(#dm:checked) {
   --olive: #A8A848;
   --magenta: #B84898;
   --jade: #4FB888;
+  /* 板岩灰：导入/加密链接兜底色（暗色下提亮保证可见性） */
+  --slate: #8A9AA8;
 
   /* 半透粉彩（暗色下保留辨识度） */
   --peach-a: rgba(200, 136, 96, .20);

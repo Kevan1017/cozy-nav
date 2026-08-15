@@ -2586,6 +2586,8 @@ function enrichMissingGlobals(group) {
       '--peach': isDark ? '#C88860' : '#E8A088',
       '--mint': isDark ? '#6BB898' : '#7BB89A',
       '--rose': isDark ? '#D88878' : '#E8928C',
+      // 板岩灰：导入/加密链接兜底色（后端默认 avatar_color = 'slate'）
+      '--slate': isDark ? '#8A9AA8' : '#7A8A98',
     };
     group[mode].cssVars = { ...cssVars, ...extra };
   }

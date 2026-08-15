@@ -6,7 +6,7 @@
  * - 批量操作：重新检测 / 重置状态 / 删除（软删除进回收站）
  */
 import { ref, computed, onMounted, onUnmounted, h } from 'vue';
-import { NCard, NDataTable, NTag, NButton, NPagination, NSelect, NCheckbox, NEmpty, useMessage, useDialog, NProgress } from 'naive-ui';
+import { NCard, NDataTable, NTag, NButton, NPagination, NCheckbox, NEmpty, useMessage, useDialog, NProgress } from 'naive-ui';
 import { linkApi } from '../../../api/link.js';
 import { renderAvatar } from '../../../composables/useRenderCell.js';
 
@@ -210,39 +210,12 @@ function handlePageChange(p) {
   page.value = p;
   loadIssues();
 }
-function handlePageSizeChange(size) {
-  pageSize.value = size;
-  page.value = 1;
-  loadIssues();
-}
 
-/** 总页数 */
-const pageCount = computed(() => Math.ceil(total.value / pageSize.value) || 1);
-
-/**
- * 移动端页码列表：固定显示 3 个页码（当前页及其前后各 1 页，窗口滑动）
- * 首/尾边界裁剪，窗口外用 ... 折叠——无论点击哪一页，数字恒为 3 个且当前页始终可见
- */
-const mobilePageItems = computed(() => {
-  const p = page.value;
-  const n = pageCount.value;
-  // 总页数少时全部展示
-  if (n <= 3) {
-    return Array.from({ length: n }, (_, i) => ({ type: 'page', value: i + 1 }));
-  }
-  // 滑动窗口起点：居中于当前页，但保证窗口不越界（1..n-2）
-  const start = Math.min(Math.max(p - 1, 1), n - 2);
-  const items = [];
-  if (start > 1) items.push({ type: 'dots' });
-  for (let i = start; i <= start + 2; i++) items.push({ type: 'page', value: i });
-  if (start + 2 < n) items.push({ type: 'dots' });
-  return items;
-});
-
-/** 移动端翻页（越界时忽略） */
-function goPage(p) {
-  if (p < 1 || p > pageCount.value) return;
-  handlePageChange(p);
+/** 小屏识别：分页切换 simple 模式（仅「1/25」+ 箭头），与收藏时光机一致 */
+const isNarrow = ref(false);
+let narrowMq = null;
+function syncNarrow(e) {
+  isNarrow.value = e.matches;
 }
 
 onMounted(() => {
@@ -250,8 +223,14 @@ onMounted(() => {
   mq = window.matchMedia('(max-width: 900px)');
   isMobile.value = mq.matches;
   mq.addEventListener('change', (e) => { isMobile.value = e.matches; });
+  narrowMq = window.matchMedia('(max-width: 768px)');
+  isNarrow.value = narrowMq.matches;
+  narrowMq.addEventListener('change', syncNarrow);
 });
-onUnmounted(stopPolling);
+onUnmounted(() => {
+  stopPolling();
+  narrowMq?.removeEventListener('change', syncNarrow);
+});
 </script>
 
 <template>
@@ -323,33 +302,14 @@ onUnmounted(stopPolling);
       </div>
     </div>
 
-    <!-- 分页：PC 用 n-pagination，移动端用自定义页码条（页码中间 ... 省略，保持单行） -->
-    <div v-if="total > pageSize" class="issue-pagination" :class="{ 'mob-paginating': isMobile }">
+    <!-- 分页：统一 n-pagination，小屏切换 simple 模式（与收藏时光机一致） -->
+    <div v-if="total > pageSize" class="issue-pagination" :class="{ 'mob-paginating': isNarrow }">
       <n-pagination
-        v-if="!isMobile"
-        :page="page"
+        v-model:page="page"
         :item-count="total"
         :page-size="pageSize"
+        :simple="isNarrow"
         @update:page="handlePageChange"
-      />
-      <div v-else class="mob-pager">
-        <span class="pager-btn" :class="{ disabled: page <= 1 }" @click="goPage(page - 1)">‹</span>
-        <template v-for="it in mobilePageItems" :key="it.type + it.value">
-          <span v-if="it.type === 'dots'" class="pager-dots">…</span>
-          <span
-            v-else
-            class="pager-num"
-            :class="{ active: it.value === page }"
-            @click="goPage(it.value)"
-          >{{ it.value }}</span>
-        </template>
-        <span class="pager-btn" :class="{ disabled: page >= pageCount }" @click="goPage(page + 1)">›</span>
-      </div>
-      <n-select
-        v-model:value="pageSize"
-        class="page-size-select"
-        :options="[{ label: '10/页', value: 10 }, { label: '20/页', value: 20 }, { label: '50/页', value: 50 }, { label: '100/页', value: 100 }]"
-        @update:value="handlePageSizeChange"
       />
     </div>
 
@@ -428,57 +388,11 @@ onUnmounted(stopPolling);
   gap: 12px;
   padding: 16px 24px 20px;
 }
-.page-size-select {
-  width: 110px;
-}
 
-/* 移动端分页：整体居中单行，页码条用省略号折叠（最多 7 个槽位） */
+/* 小屏分页：整体居中单行 */
 .mob-paginating {
   justify-content: center;
   gap: 10px;
-}
-.mob-paginating .page-size-select {
-  width: 96px;
-}
-
-/* 移动端页码条 */
-.mob-pager {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 13px;
-  min-width: 0;
-}
-.pager-btn,
-.pager-num {
-  min-width: 26px;
-  height: 26px;
-  padding: 0 3px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 7px;
-  cursor: pointer;
-  color: var(--admin-text);
-  background: color-mix(in srgb, var(--admin-card, #fff) 70%, transparent);
-  border: 1px solid var(--admin-border, rgba(120, 100, 90, 0.14));
-  user-select: none;
-}
-.pager-num.active {
-  background: var(--admin-accent);
-  border-color: transparent;
-  color: #fff;
-  font-weight: 600;
-}
-.pager-btn.disabled {
-  opacity: 0.4;
-  pointer-events: none;
-}
-.pager-dots {
-  color: var(--admin-muted);
-  padding: 0 1px;
-  min-width: 12px;
-  text-align: center;
 }
 
 /* 移动端卡片 */

@@ -10,7 +10,7 @@ import { sortByMode } from '../../composables/useSort.js';
 
 const props = defineProps({
   categories: { type: Array, default: () => [] },
-  /** 视图模式：card / list / compact */
+  /** 视图模式：card / list / compact / dial（dial 与 card 同为 3 列大卡，靠卡内大图标墙区分） */
   viewMode: { type: String, default: 'card' },
 });
 
@@ -54,6 +54,11 @@ const sortedCategories = computed(() => {
 
 /* list：分类卡单列通栏（每行一个分类），靠链接多列密排区分 */
 .grid-list {
+  grid-template-columns: 1fr;
+}
+
+/* dial（图标平铺）：分类卡同样单列通栏（每行一个分类），同 list */
+.grid-dial {
   grid-template-columns: 1fr;
 }
 

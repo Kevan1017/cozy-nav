@@ -83,8 +83,4 @@ onMounted(load);
   color: var(--admin-accent);
   font-size: clamp(18px, 4vw, 24px);
 }
-:deep(.n-page-header__sub-title) {
-  color: var(--admin-muted);
-  font-size: 13px;
-}
 </style>

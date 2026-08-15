@@ -53,7 +53,9 @@ const faviconSrc = computed(() => {
       width: `${size}px`,
       height: `${size}px`,
       borderRadius: `${radius}px`,
-      background: imgLoaded ? 'transparent' : resolveColor(avatarColor)
+      /* 加载完成用 --fav-plate 背板（图标平铺视图下由外层声明为浅色块，与磁贴底拉开层次；
+         其余视图不声明该变量则回退透明，行为不变）；加载前用字母头像底色打底 */
+      background: imgLoaded ? 'var(--fav-plate, transparent)' : resolveColor(avatarColor)
     }"
   >
     <img

@@ -8,6 +8,21 @@ import { ref } from 'vue';
 import { prefsApi } from '../api/prefs.js';
 import { DEFAULT_PRESET_KEY, findThemeGroup } from '../theme/themePresets.js';
 
+/**
+ * 本地偏好缓存版本号：
+ * - fetchPrefs 完成后 syncLocalStorage 会写入此标记
+ * - main.js 据此判断"本地是否有完整偏好缓存"：有缓存时挂载不再等待 /api/preferences，
+ *   fetchPrefs 改为后台静默刷新（App.vue 的 watch 自动应用最新配置），回访用户首屏免一次网络往返；
+ *   无缓存（新用户首访/缓存被清）时保持等待，避免"默认配色 → 后端配置"闪烁
+ * - 后续新增偏好字段时递增版本号，老缓存自动失效（走等待路径），防止缺字段导致首帧取值不准
+ */
+const PREFS_CACHE_VERSION = 1;
+
+/** 本地是否存在完整偏好缓存（版本匹配才算有效） */
+export function hasPrefsCache() {
+  return localStorage.getItem('prefsCacheVersion') === String(PREFS_CACHE_VERSION);
+}
+
 /** 旧预设 key → 新主题 key 的迁移映射 */
 const LEGACY_KEY_MAP = {
   'warm-brown': 'amber-pine',
@@ -26,13 +41,16 @@ function migratePresetKey(key) {
 export const usePrefsStore = defineStore('prefs', () => {
   const theme = ref(localStorage.getItem('theme') || 'auto');
   const searchEngine = ref(localStorage.getItem('searchEngine') || 'google');
+  /** 搜索引擎显示数量（后端 engine_display_count，供搜索栏截取引擎列表） */
+  const engineDisplayCount = ref(parseInt(localStorage.getItem('engineDisplayCount') || '3', 10) || 3);
   const themePreset = ref(migratePresetKey(localStorage.getItem('themePreset')));
   /** 是否在前台显示域名（默认显示） */
   const showDomain = ref(localStorage.getItem('showDomain') !== '0');
   /** 无图模式（默认关闭）：开启后前台隐藏 favicon / 字母头像，纯文字卡片 */
   const noImage = ref(localStorage.getItem('noImage') === '1');
-  /** 视图模式：card（卡片）/ list（列表）/ compact（紧凑） */
-  const viewMode = ref(localStorage.getItem('viewMode') || 'card');
+  /** 视图模式：card（卡片）/ list（列表）/ compact（紧凑）/ dial（图标平铺） */
+  const storedViewMode = localStorage.getItem('viewMode');
+  const viewMode = ref(['card', 'list', 'compact', 'dial'].includes(storedViewMode) ? storedViewMode : 'card');
   /** 视图布局功能开关（默认开启）：开启后可后台设置默认布局、前台手动切换仅本地生效 */
   const viewLayoutEnabled = ref(localStorage.getItem('viewLayoutEnabled') !== '0');
   /** 后端默认视图布局（后台设置，回显与清除浏览器数据后的回落值，不受前台手动切换影响） */
@@ -57,14 +75,14 @@ export const usePrefsStore = defineStore('prefs', () => {
   const statTagline = ref(localStorage.getItem('statTagline') || '— everything in its place —');
   /** 自定义配色覆盖层：{light:{--bg:'#xxx',...}, dark:{...}}，改过的项覆盖预设 */
   const customTheme = ref(loadCustomTheme());
-  /** 网站标题（后台基本配置，默认「悦行」） */
-  const siteTitle = ref('悦行');
+  /** 网站标题（后台基本配置，默认「悦行」；优先取本地缓存以便回访用户首帧即正确） */
+  const siteTitle = ref(localStorage.getItem('siteTitle') || '悦行');
   /** 站点 Logo 路径（空表示使用文字 Logo） */
-  const siteLogo = ref('');
+  const siteLogo = ref(localStorage.getItem('siteLogo') || '');
   /** 站点关键词（写入 HTML meta） */
-  const siteKeywords = ref('');
+  const siteKeywords = ref(localStorage.getItem('siteKeywords') || '');
   /** 站点描述（写入 HTML meta） */
-  const siteDescription = ref('');
+  const siteDescription = ref(localStorage.getItem('siteDescription') || '');
   /** 前台分类排序模式：sort_order:asc（默认）/ created_at:asc|desc / name:asc|desc */
   const categorySortMode = ref(localStorage.getItem('categorySortMode') || 'sort_order:asc');
   /** 前台书签排序模式：sort_order:asc（默认）/ created_at:asc|desc / name:asc|desc */
@@ -90,6 +108,10 @@ export const usePrefsStore = defineStore('prefs', () => {
       theme.value = backendTheme;
     }
     searchEngine.value = res.data.search_engine;
+    // 引擎显示数量（后台设置，供搜索栏截取）
+    if (res.data.engine_display_count !== undefined && res.data.engine_display_count !== null) {
+      engineDisplayCount.value = res.data.engine_display_count;
+    }
     if (res.data.theme_preset) {
       themePreset.value = migratePresetKey(res.data.theme_preset);
     }
@@ -234,6 +256,8 @@ export const usePrefsStore = defineStore('prefs', () => {
 
   /** 更新视图模式（前台手动切换：仅对当前浏览器生效，不再写后端默认布局） */
   async function updateViewMode(val) {
+    // 校验合法性：历史上 tab 视图已废弃，残留值回退到 card
+    if (!['card', 'list', 'compact', 'dial'].includes(val)) val = 'card';
     viewMode.value = val;
     localStorage.setItem('viewMode', val);
     // 标记用户手动切换过布局：刷新后以本地选择为准，不再被后端默认值覆盖
@@ -420,6 +444,7 @@ export const usePrefsStore = defineStore('prefs', () => {
   function syncLocalStorage() {
     localStorage.setItem('theme', theme.value);
     localStorage.setItem('searchEngine', searchEngine.value);
+    localStorage.setItem('engineDisplayCount', String(engineDisplayCount.value));
     localStorage.setItem('themePreset', themePreset.value);
     localStorage.setItem('showDomain', showDomain.value ? '1' : '0');
     localStorage.setItem('noImage', noImage.value ? '1' : '0');
@@ -441,11 +466,14 @@ export const usePrefsStore = defineStore('prefs', () => {
     localStorage.setItem('siteLogo', siteLogo.value);
     localStorage.setItem('categorySortMode', categorySortMode.value);
     localStorage.setItem('linkSortMode', linkSortMode.value);
+    // 完整偏好缓存标记：main.js 据此判断挂载是否可跳过偏好请求（版本不匹配时视为无缓存）
+    localStorage.setItem('prefsCacheVersion', String(PREFS_CACHE_VERSION));
   }
 
   return {
     theme,
     searchEngine,
+    engineDisplayCount,
     themePreset,
     showDomain,
     noImage,

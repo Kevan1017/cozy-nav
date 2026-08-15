@@ -218,9 +218,7 @@ watch(() => props.categories, () => {
   align-items: center;
   gap: 8px;
   padding: 8px;
-  background: color-mix(in oklab, var(--card, #fff) 82%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: var(--card-solid, #fff);
   border: 1px solid var(--topbar-pill-border, var(--rule, rgba(0, 0, 0, .08)));
   border-radius: 999px;
   box-shadow: 0 10px 24px -18px var(--shadow, rgba(0, 0, 0, .25));

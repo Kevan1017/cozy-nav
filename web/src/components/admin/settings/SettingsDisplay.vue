@@ -372,6 +372,7 @@ onMounted(() => {
         <n-radio value="card" label="标准视图" />
         <n-radio value="list" label="列表视图" />
         <n-radio value="compact" label="紧凑视图" />
+        <n-radio value="dial" label="图标平铺" />
       </n-radio-group>
     </div>
 

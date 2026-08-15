@@ -35,8 +35,19 @@ import IssueManage from '../../components/admin/health/IssueManage.vue';
   color: var(--admin-accent);
   font-size: clamp(18px, 4vw, 24px);
 }
-:deep(.n-page-header__sub-title) {
+:deep(.n-page-header__subtitle) {
   color: var(--admin-muted);
   font-size: 13px;
+}
+
+/* 小屏：标题与副标题纵向排列，避免长副标题挤压标题换行 */
+@media (max-width: 768px) {
+  :deep(.n-page-header__main) {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  :deep(.n-page-header__subtitle) {
+    margin-left: 0;
+  }
 }
 </style>

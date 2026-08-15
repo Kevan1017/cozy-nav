@@ -125,6 +125,11 @@ function goHealth() {
   router.push('/admin/health');
 }
 
+/** 跳转收藏时光机（趋势卡片入口） */
+function goTimeline() {
+  router.push('/admin/timeline');
+}
+
 /** 跳转书签管理页并筛选定位到该异常链接 */
 function goLinkManage(item) {
   router.push({ path: '/admin/links', query: { health: item.status, linkId: item.id } });
@@ -203,6 +208,7 @@ function goLinkManage(item) {
           <template #header>
             <span class="panel-title">近 7 天访问趋势</span>
             <span v-if="trend.length" class="trend-badge" :class="`trend-${trendCompare.dir}`">{{ trendCompare.text }}</span>
+            <n-button text type="primary" size="small" class="health-go" @click="goTimeline">时光机 →</n-button>
           </template>
           <v-chart v-if="trend.length" class="trend-chart" :option="trendOption" autoresize />
           <n-empty v-else description="还没有访问数据，去前台点几个书签吧～" class="chart-empty" />
@@ -304,10 +310,6 @@ function goLinkManage(item) {
   font-family: 'Fredoka', var(--app-font, sans-serif);
   color: var(--admin-accent);
   font-size: clamp(20px, 4vw, 28px);
-}
-:deep(.n-page-header__sub-title) {
-  color: var(--admin-muted);
-  font-size: 13px;
 }
 
 .stat-card {

@@ -54,9 +54,9 @@ watch(() => prefsStore.siteLogo, (val) => {
   brandImgOk.value = !!val;
 });
 
-/** 视图模式循环切换：card → list → compact → card */
-const viewModeCycle = ['card', 'list', 'compact'];
-const viewModeLabels = { card: '标准视图', list: '列表视图', compact: '紧凑视图' };
+/** 视图模式循环切换：card → list → compact → dial → card */
+const viewModeCycle = ['card', 'list', 'compact', 'dial'];
+const viewModeLabels = { card: '标准视图', list: '列表视图', compact: '紧凑视图', dial: '图标平铺' };
 const viewModeTitle = computed(() => viewModeLabels[prefsStore.viewMode] || '卡片视图');
 function cycleViewMode() {
   const idx = viewModeCycle.indexOf(prefsStore.viewMode);
@@ -240,7 +240,7 @@ async function doLogin() {
           <line x1="3" y1="18" x2="21" y2="18" stroke-linecap="round" />
         </svg>
         <!-- 紧凑视图：链接 3 列 -->
-        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg v-else-if="prefsStore.viewMode === 'compact'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="3" width="5" height="5" rx="1" />
           <rect x="10" y="3" width="5" height="5" rx="1" />
           <rect x="17" y="3" width="4" height="5" rx="1" />
@@ -250,6 +250,14 @@ async function doLogin() {
           <rect x="3" y="17" width="5" height="4" rx="1" />
           <rect x="10" y="17" width="5" height="4" rx="1" />
           <rect x="17" y="17" width="4" height="4" rx="1" />
+        </svg>
+        <!-- 图标平铺视图：大图标墙 -->
+        <svg v-else-if="prefsStore.viewMode === 'dial'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="8" height="8" rx="2" />
+          <rect x="13" y="3" width="8" height="8" rx="2" />
+          <rect x="3" y="13" width="8" height="8" rx="2" />
+          <rect x="13" y="13" width="8" height="8" rx="2" />
+          <line x1="3" y1="21" x2="21" y2="21" stroke-linecap="round" />
         </svg>
       </button>
 

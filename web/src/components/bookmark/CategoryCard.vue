@@ -13,7 +13,7 @@ import { useResponsive } from '../../composables/useResponsive.js';
 const props = defineProps({
   category: { type: Object, required: true },
   index: { type: Number, default: 0 },
-  /** 视图模式：card（卡片）/ list（列表）/ compact（紧凑） */
+  /** 视图模式：card（卡片）/ list（列表）/ compact（紧凑）/ dial（图标平铺） */
   viewMode: { type: String, default: 'card' },
 });
 
@@ -48,16 +48,19 @@ const linkCount = computed(() => String(props.category.links?.length || 0).padSt
 /** 入场动画延迟 */
 const animDelay = computed(() => `${0.36 + props.index * 0.08}s`);
 
-/* ========== 分类折叠：card / compact 展示六排，list 按原阈值，超限点击展开 ========== */
+/* ========== 分类折叠：card / compact 展示六排，dial 三排，list 按原阈值，超限点击展开 ========== */
 /** list 视图折叠阈值：桌面 8 列 4 行 = 32 条；移动端单列 10 行 = 10 条（现状不变） */
 const LIST_COLLAPSE_THRESHOLD_DESKTOP = 32;
 const LIST_COLLAPSE_THRESHOLD_MOBILE = 10;
 /** card / compact 视图默认展示行数（六排） */
 const MAX_ROWS_CARD_COMPACT = 6;
+/** dial（图标平铺）视图默认展示行数（大图标三排） */
+const MAX_ROWS_DIAL = 3;
 
-/** card / compact 视图每行列数（条数 = 行数 × 列数）：compact ≤480px 为 2 列，其余 3 列；card 固定 2 列 */
+/** 每行列数：card 固定 2 列；dial 按 68px 方形网格估算（桌面 1216px 内容区约 15 列 / 窄屏 60px 方块 5 列）；compact ≤480px 为 2 列，其余 3 列 */
 const columnsPerRow = computed(() => {
   if (props.viewMode === 'card') return 2;
+  if (props.viewMode === 'dial') return isNarrow.value ? 5 : 15;
   return isNarrow.value ? 2 : 3;
 });
 
@@ -72,10 +75,13 @@ watch(() => props.viewMode, () => {
 /** 链接总数 */
 const totalLinks = computed(() => props.category.links?.length || 0);
 
-/** 折叠阈值（条数）：list 按原阈值；card / compact 按六排 × 每行列数换算 */
+/** 折叠阈值（条数）：list 按原阈值；card / compact 按六排 × 每行列数；dial 按三排 × 每行列数 */
 const collapseThreshold = computed(() => {
   if (props.viewMode === 'list') {
     return isMobile.value ? LIST_COLLAPSE_THRESHOLD_MOBILE : LIST_COLLAPSE_THRESHOLD_DESKTOP;
+  }
+  if (props.viewMode === 'dial') {
+    return MAX_ROWS_DIAL * columnsPerRow.value;
   }
   return MAX_ROWS_CARD_COMPACT * columnsPerRow.value;
 });
@@ -139,6 +145,7 @@ function toggleExpand() {
           :key="link.id"
           :link="link"
           :unlocked="vaultUnlocked"
+          :view-mode="viewMode"
           @open="emit('open', $event)"
           @unlock="emit('unlock')"
         />
@@ -283,12 +290,23 @@ function toggleExpand() {
 .links-wrapper {
   position: relative;
   z-index: 1;
+  /* 图标背板：favicon 加载完成后在链接块内呈卡片实色圆角块（块中块），
+     与链接块底色拉开层次；所有视图统一生效，暗色主题为深卡其实色 */
+  --fav-plate: var(--card-solid);
 }
 
 .links {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
+}
+
+/* 所有视图统一：图标块（favicon 或字母头像）加卡片实色背板与独立阴影，
+   从链接块底色中浮起，形成块中块层次；边框保持 1px 透明避免视图切换过渡闪烁 */
+.links :deep(.favicon-img),
+.links :deep(.av) {
+  border: 1px solid transparent;
+  box-shadow: 0 6px 12px -6px var(--shadow, rgba(42, 58, 74, .3));
 }
 
 /* 列表视图：链接多列密排（通栏卡片内 8 列，窄屏 2 列） */
@@ -313,6 +331,56 @@ function toggleExpand() {
   display: none;
 }
 
+/* 图标平铺视图：链接大图标墙（竖排居中，图标 34px + 名称小字）。
+   块按最小 68px 自适应列数并保持正方形（aspect-ratio: 1），类似手机桌面网格 */
+.links-dial {
+  grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+  gap: 10px;
+}
+
+.links-dial :deep(.lk) {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 4px 6px;
+  aspect-ratio: 1;
+  border-radius: 14px;
+  text-align: center;
+  /* 与默认主题风格一致：底色/阴影引用主题变量，自动适配 9 套预设的亮暗变体。
+     边框保持 1px 透明与标准视图同一声明，避免视图切换时过渡闪烁；
+     阴影加深形成磁贴浮起感，与卡片背景拉开层次 */
+  background: var(--link-bg);
+  border: 1px solid transparent;
+  box-shadow: 0 10px 22px -10px var(--shadow, rgba(42, 58, 74, .3));
+}
+
+.links-dial :deep(.lk:hover) {
+  background: var(--link-hover, var(--card-solid));
+}
+
+.links-dial :deep(.txt) {
+  /* 关闭基础样式的 flex-grow 拉伸，否则竖排布局中名称区会被拉满剩余高度、图标偏上 */
+  flex: none;
+  width: 100%;
+  text-align: center;
+}
+
+.links-dial :deep(.nm) {
+  justify-content: center;
+  font-size: clamp(9.5px, 2.1vw, 10.5px);
+  line-height: 1.3;
+}
+
+.links-dial :deep(.dm) {
+  display: none;
+}
+
+/* 图标平铺下锁定条目保留"点击解锁查看"提示（.dm 默认被隐藏，此处恢复） */
+.links-dial :deep(.lk-locked .dm) {
+  display: block;
+}
+
 @media (max-width: 768px) {
   /* 移动端（与 CategoryGrid 单列断点一致）：列表视图链接单列，每行一个 */
   .links-list {
@@ -323,6 +391,10 @@ function toggleExpand() {
 @media (max-width: 480px) {
   .links-compact {
     grid-template-columns: repeat(2, 1fr);
+  }
+  /* 图标平铺：窄屏缩小最小块宽，一行排 5 个方块（桌面仍 15 列） */
+  .links-dial {
+    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
   }
 }
 

@@ -5,9 +5,31 @@ import { Router } from 'express';
 import { query, param } from 'express-validator';
 import { authMiddleware } from '../middlewares/auth.js';
 import { validate } from '../middlewares/validate.js';
-import { getOverview, getTopLinks, getVisitTrend, getHealthOverview, getColdLinks, getPatrolReports, getPatrolReportDetail } from '../controllers/statsController.js';
+import { getOverview, getTopLinks, getVisitTrend, getHealthOverview, getColdLinks, getPatrolReports, getPatrolReportDetail, getDayDetail, getHighlightDays } from '../controllers/statsController.js';
 
 const router = Router();
+
+// GET /api/stats/highlight/days?days=365 - 时光机日历标记（近 N 天有收藏/访问的日期）
+router.get(
+  '/highlight/days',
+  authMiddleware,
+  [
+    query('days').optional().isInt({ min: 30, max: 1095 }).withMessage('days 需为 30-1095 的整数'),
+  ],
+  validate,
+  getHighlightDays
+);
+
+// GET /api/stats/day/detail?date=YYYY-MM-DD - 收藏时光机（指定日期当天收藏与访问）
+router.get(
+  '/day/detail',
+  authMiddleware,
+  [
+    query('date').matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('date 需为 YYYY-MM-DD 格式'),
+  ],
+  validate,
+  getDayDetail
+);
 
 // GET /api/stats/overview - 数据概览
 router.get('/overview', authMiddleware, getOverview);

@@ -407,10 +407,6 @@ onMounted(loadData);
   color: var(--admin-accent);
   font-size: clamp(18px, 4vw, 24px);
 }
-:deep(.n-page-header__sub-title) {
-  color: var(--admin-muted);
-  font-size: 13px;
-}
 
 .display-count {
   display: flex;
@@ -431,6 +427,26 @@ onMounted(loadData);
   font-size: 12px;
   color: var(--admin-muted);
   margin-left: 8px;
+}
+
+/* 小屏：标签/输入框/按钮一行，提示文本独占一行，避免错位 */
+@media (max-width: 768px) {
+  .display-count {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  .count-label {
+    flex-shrink: 0;
+  }
+  .display-count :deep(.n-input-number) {
+    width: 100px;
+    flex-shrink: 0;
+  }
+  .count-hint {
+    flex-basis: 100%;
+    margin-left: 0;
+    padding-left: 2px;
+  }
 }
 
 .table-wrap {
