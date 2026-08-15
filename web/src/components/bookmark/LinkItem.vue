@@ -16,7 +16,13 @@ const props = defineProps({
   link: { type: Object, required: true },
   /** 保险库是否已解锁（已解锁时加密链接正常显示） */
   unlocked: { type: Boolean, default: false },
+  /** 视图模式：dial（图标平铺）时头像放大、内容竖向居中（其余视图统一横向布局） */
+  viewMode: { type: String, default: 'card' },
 });
+
+/** 图标平铺视图：大号 favicon（其余视图保持 32px 标准尺寸） */
+const iconSize = computed(() => (props.viewMode === 'dial' ? 34 : 32));
+const iconRadius = computed(() => (props.viewMode === 'dial' ? 10 : 11));
 
 const prefsStore = usePrefsStore();
 
@@ -71,17 +77,17 @@ function handleOpen() {
       :favicon-path="link.favicon_path"
       :avatar-text="link.avatar_text"
       :avatar-color="link.avatar_color"
-      :size="32"
-      :radius="11"
+      :size="iconSize"
+      :radius="iconRadius"
     />
     <!-- 无 favicon：直接内联字母头像（免去组件实例，600+ 链接时显著减负） -->
     <div
       v-else-if="!prefsStore.noImage"
       class="av"
       :style="{
-        width: '32px',
-        height: '32px',
-        borderRadius: '11px',
+        width: `${iconSize}px`,
+        height: `${iconSize}px`,
+        borderRadius: `${iconRadius}px`,
         background: resolveColor(link.avatar_color)
       }"
     >{{ link.avatar_text }}</div>

@@ -188,7 +188,7 @@ router.put(
     body('theme_preset').optional().isString().isLength({ min: 3, max: 30 }).withMessage('配色预设标识长度需在 3-30 之间'),
     body('show_domain').optional().isInt({ min: 0, max: 1 }).withMessage('show_domain 只能为 0 或 1'),
     body('no_image').optional().isInt({ min: 0, max: 1 }).withMessage('no_image 只能为 0 或 1'),
-    body('view_mode').optional().isIn(['card', 'list', 'compact']).withMessage('view_mode 只能为 card、list 或 compact'),
+    body('view_mode').optional().isIn(['card', 'list', 'compact', 'dial']).withMessage('view_mode 只能为 card、list、compact 或 dial'),
     body('view_layout_enabled').optional().isInt({ min: 0, max: 1 }).withMessage('view_layout_enabled 只能为 0 或 1'),
     body('sort_enabled').optional().isInt({ min: 0, max: 1 }).withMessage('sort_enabled 只能为 0 或 1'),
     body('font_family').optional().isIn(['system', 'kai', 'serif']).withMessage('font_family 只能为 system、kai 或 serif'),

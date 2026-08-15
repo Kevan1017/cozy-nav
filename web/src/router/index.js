@@ -43,6 +43,11 @@ const routes = [
         component: () => import('../views/admin/DataManage.vue'),
       },
       {
+        path: 'timeline',
+        name: 'TimeMachine',
+        component: () => import('../views/admin/TimeMachine.vue'),
+      },
+      {
         path: 'health',
         name: 'HealthMonitor',
         component: () => import('../views/admin/HealthMonitor.vue'),

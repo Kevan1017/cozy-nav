@@ -31,8 +31,9 @@ export const usePrefsStore = defineStore('prefs', () => {
   const showDomain = ref(localStorage.getItem('showDomain') !== '0');
   /** 无图模式（默认关闭）：开启后前台隐藏 favicon / 字母头像，纯文字卡片 */
   const noImage = ref(localStorage.getItem('noImage') === '1');
-  /** 视图模式：card（卡片）/ list（列表）/ compact（紧凑） */
-  const viewMode = ref(localStorage.getItem('viewMode') || 'card');
+  /** 视图模式：card（卡片）/ list（列表）/ compact（紧凑）/ dial（图标平铺） */
+  const storedViewMode = localStorage.getItem('viewMode');
+  const viewMode = ref(['card', 'list', 'compact', 'dial'].includes(storedViewMode) ? storedViewMode : 'card');
   /** 视图布局功能开关（默认开启）：开启后可后台设置默认布局、前台手动切换仅本地生效 */
   const viewLayoutEnabled = ref(localStorage.getItem('viewLayoutEnabled') !== '0');
   /** 后端默认视图布局（后台设置，回显与清除浏览器数据后的回落值，不受前台手动切换影响） */
@@ -234,6 +235,8 @@ export const usePrefsStore = defineStore('prefs', () => {
 
   /** 更新视图模式（前台手动切换：仅对当前浏览器生效，不再写后端默认布局） */
   async function updateViewMode(val) {
+    // 校验合法性：历史上 tab 视图已废弃，残留值回退到 card
+    if (!['card', 'list', 'compact', 'dial'].includes(val)) val = 'card';
     viewMode.value = val;
     localStorage.setItem('viewMode', val);
     // 标记用户手动切换过布局：刷新后以本地选择为准，不再被后端默认值覆盖

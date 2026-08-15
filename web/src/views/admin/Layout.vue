@@ -25,6 +25,7 @@ import {
   Search,
   Database,
   Stethoscope,
+  History,
   Bell,
   ScrollText,
   Palette,
@@ -66,6 +67,7 @@ const menuOptions = computed(() => [
     key: 'g-data',
     children: [
       { label: '数据管理', key: '/admin/data', icon: renderIcon(Database) },
+      { label: '收藏时光机', key: '/admin/timeline', icon: renderIcon(History) },
       { label: '链接巡检', key: '/admin/health', icon: renderIcon(Stethoscope) },
     ],
   },

@@ -31,7 +31,7 @@ const { query, engineKey, results, activeIndex, setEngine, search, openLink,
 
 /** 节日彩蛋（仅 PC 端非触摸设备显示） */
 const { festival } = useFestival();
-const { isMobile, isDesktop } = useResponsive();
+const { isMobile } = useResponsive();
 /** 触摸屏设备（手机/平板，无论屏幕多大）一律不显示节日彩蛋 */
 const isTouchDevice = ref(window.matchMedia('(pointer: coarse)').matches);
 /** 是否显示节日装饰：非移动宽度 + 非触摸设备，且开关开启 */
@@ -112,11 +112,9 @@ onMounted(async () => {
       @open="openLink"
     />
 
-    <!-- 分类快捷导航条：仅 PC（≥1024px）显示，数据到位后 bob 淡入，与分类卡片同时出现 -->
-    <CategoryNavBar
-      v-if="isDesktop"
-      :categories="dataStore.categories"
-    />
+    <!-- 分类快捷导航条：PC/移动端均显示（分类 ≥4 个时），数据到位后 bob 淡入，与分类卡片同时出现；
+         组件内部自带 v-if="categories.length >= 4"，此处无条件 -->
+    <CategoryNavBar :categories="dataStore.categories" />
 
     <CategoryGrid
       :categories="dataStore.categories"

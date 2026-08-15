@@ -32,4 +32,12 @@ export const statsApi = {
   getPatrolReportDetail(id) {
     return request.get(`/stats/patrol/reports/${id}`);
   },
+  /** 收藏时光机：指定日期当天收藏的书签 + 当天访问轨迹（鉴权） */
+  getDayDetail(date) {
+    return request.get('/stats/day/detail', { params: { date } });
+  },
+  /** 时光机日历标记：近 N 天有收藏/访问的日期集合（鉴权） */
+  getHighlightDays(days = 365) {
+    return request.get('/stats/highlight/days', { params: { days } });
+  },
 };

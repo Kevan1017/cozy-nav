@@ -259,3 +259,72 @@ export function getPatrolReportDetail(req, res) {
 
   return jsonSuccess(res, { ...decorateReport(report), issues });
 }
+
+/**
+ * 收藏时光机：指定日期当天收藏的书签 + 当天访问轨迹
+ * GET /api/stats/day/detail?date=YYYY-MM-DD【鉴权】
+ */
+export function getDayDetail(req, res) {
+  const date = req.query.date;
+
+  // 当天收藏的书签（按创建时间倒序，新收藏在前）
+  const collected = db.prepare(`
+    SELECT l.id, l.name, l.url, l.domain, l.favicon_path, l.avatar_text, l.avatar_color,
+           c.name AS category_name, l.created_at
+    FROM links l
+    LEFT JOIN categories c ON c.id = l.category_id
+    WHERE l.deleted_at IS NULL AND date(l.created_at, 'localtime') = ?
+    ORDER BY l.created_at DESC
+  `).all(date);
+
+  // 当天访问轨迹（同一书签合并计数，按首次访问正序）
+  const visited = db.prepare(`
+    SELECT l.id AS link_id, l.name, l.url, l.domain, l.favicon_path, l.avatar_text, l.avatar_color,
+           c.name AS category_name,
+           strftime('%H:%M', MIN(v.visited_at), 'localtime') AS time,
+           COUNT(*) AS count
+    FROM visit_logs v
+    JOIN links l ON l.id = v.link_id AND l.deleted_at IS NULL
+    LEFT JOIN categories c ON c.id = l.category_id AND c.deleted_at IS NULL
+    WHERE date(v.visited_at, 'localtime') = ?
+    GROUP BY v.link_id
+    ORDER BY MIN(v.visited_at) ASC
+  `).all(date);
+
+  return jsonSuccess(res, { date, collected, visited });
+}
+
+/**
+ * 时光机日历标记：近 N 天有收藏 / 访问的日期集合
+ * GET /api/stats/highlight/days?days=365【鉴权】
+ * 返回 [{ date: 'YYYY-MM-DD', collected: bool, visited: bool }]，供日期选择器打点
+ */
+export function getHighlightDays(req, res) {
+  const days = Math.min(Math.max(parseInt(req.query.days) || 365, 30), 1095);
+
+  // 有收藏的日期（按本地日期分组）
+  const collectedRows = db.prepare(`
+    SELECT date(created_at, 'localtime') AS d
+    FROM links
+    WHERE deleted_at IS NULL AND date(created_at, 'localtime') >= date('now', 'localtime', ?)
+    GROUP BY d
+  `).all(`-${days} day`);
+
+  // 有访问的日期（按本地日期分组）
+  const visitedRows = db.prepare(`
+    SELECT date(visited_at, 'localtime') AS d
+    FROM visit_logs
+    WHERE date(visited_at, 'localtime') >= date('now', 'localtime', ?)
+    GROUP BY d
+  `).all(`-${days} day`);
+
+  const collectedSet = new Set(collectedRows.map((r) => r.d));
+  const visitedSet = new Set(visitedRows.map((r) => r.d));
+  const allDates = new Set([...collectedSet, ...visitedSet]);
+
+  const items = [...allDates]
+    .sort()
+    .map((date) => ({ date, collected: collectedSet.has(date), visited: visitedSet.has(date) }));
+
+  return jsonSuccess(res, { items });
+}
