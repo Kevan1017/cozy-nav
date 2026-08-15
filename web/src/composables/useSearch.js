@@ -6,6 +6,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { enginesApi } from '../api/engines.js';
 import { prefsApi } from '../api/prefs.js';
+import { linkApi } from '../api/link.js';
 
 /** 引擎数据（从后端加载） */
 const engineList = ref([]);
@@ -107,11 +108,19 @@ export function useSearch(getLinks) {
     }
   }
 
-  /** 打开书签链接 */
-  function openLink(url) {
+  /**
+   * 打开书签链接（兼容传 url 字符串或 link 对象）
+   * 传 link 对象（来自置顶栏/搜索结果）时先异步埋点记录访问，再打开链接
+   */
+  function openLink(target) {
+    const url = typeof target === 'string' ? target : target?.url;
+    const id = typeof target === 'object' ? target?.id : null;
     if (!url) return;
     if (!isSafeUrl(url)) {
       return;
+    }
+    if (id) {
+      linkApi.visit(id).catch(() => {});
     }
     window.open(url, '_blank');
   }
@@ -131,10 +140,10 @@ export function useSearch(getLinks) {
   /** 确认选中 */
   function confirm() {
     if (activeIndex.value >= 0 && results.value[activeIndex.value]) {
-      openLink(results.value[activeIndex.value].url);
+      openLink(results.value[activeIndex.value]);
       clear();
     } else if (results.value.length > 0) {
-      openLink(results.value[0].url);
+      openLink(results.value[0]);
       clear();
     } else {
       search();
