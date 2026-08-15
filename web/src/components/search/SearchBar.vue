@@ -167,7 +167,7 @@ const showNoResult = computed(() => hasQuery.value && !showResults.value);
             :key="link.id"
             class="result-item"
             :class="{ active: i === activeIndex }"
-            @click="emit('open', link.url)"
+            @click="emit('open', link)"
             @mouseenter="emit('navigate', i)"
           >
             <span class="r-name">
