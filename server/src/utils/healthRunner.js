@@ -136,8 +136,9 @@ export function startHealthBatch(links, { logTag = '批量检测', deadStreak = 
       }
       console.log(`[${new Date().toISOString()}] [书签] [${logTag}] [完成] ok=${batchTask?.ok ?? 0} blocked=${batchTask?.blocked ?? 0} fail=${batchTask?.fail ?? 0} skip=${batchTask?.skip ?? 0}`);
       // 一轮检测结束后，按通知配置决定是否推送管理员（失败静默，不影响主流程）
+      // 等待发送完成再返回，避免进程随后重启/退出时通知丢失
       if (batchTask) {
-        notifyPatrolResult({ total: batchTask.total, ok: batchTask.ok, blocked: batchTask.blocked, fail: batchTask.fail, skip: batchTask.skip });
+        await notifyPatrolResult({ total: batchTask.total, ok: batchTask.ok, blocked: batchTask.blocked, fail: batchTask.fail, skip: batchTask.skip });
       }
     }
   });

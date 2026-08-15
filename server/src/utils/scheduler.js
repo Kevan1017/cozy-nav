@@ -157,8 +157,8 @@ async function runBackupOnce({ force = false } = {}) {
       });
     }
 
-    // 通知备份结果（成功/失败 + 云端上传状态），不影响主流程
-    notifyBackup({
+    // 通知备份结果（成功/失败 + 云端上传状态），等待发送完成，避免进程重启时通知丢失
+    await notifyBackup({
       ok: result.ok,
       file: result.file || '',
       size: formatBackupSize(result.size),
