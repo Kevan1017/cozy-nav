@@ -358,12 +358,18 @@ body:has(#dm:checked) .mobile-title {
   background: transparent !important;
 }
 
-/* 菜单滚动区：占据侧边栏剩余空间，超出时内部滚动 */
+/* 菜单滚动区：占据侧边栏剩余空间，超出时内部滚动（隐藏滚动条，滚轮/触摸仍可滚动） */
 .menu-wrap {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  /* 隐藏原生滚动条，避免菜单区右侧出现滚动条 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE / Edge 旧版 */
+}
+.menu-wrap::-webkit-scrollbar {
+  display: none; /* Chrome / Safari / Edge */
 }
 
 /* 菜单分组标题：小号弱化，与菜单项拉开层级 */
