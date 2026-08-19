@@ -53,6 +53,25 @@ function handleOpen() {
   }
   emit('open', props.link.url);
 }
+
+/** 仅 http/https 链接绑定 href：中键/右键「在新标签页打开」由浏览器原生支持，且不引入危险协议 */
+const safeHref = computed(() => {
+  try {
+    const parsed = new URL(props.link.url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      ? props.link.url
+      : undefined;
+  } catch {
+    return undefined;
+  }
+});
+
+/** 中键点击：浏览器原生在新标签页打开，这里只补记访问埋点，不拦截默认行为 */
+function handleAuxClick(e) {
+  if (e.button === 1 && props.link.id) {
+    linkApi.visit(props.link.id).catch(() => {});
+  }
+}
 </script>
 
 <template>
@@ -65,13 +84,15 @@ function handleOpen() {
     </div>
   </div>
 
-  <!-- 正常书签：常用标记为链接块左边框（金色），闲置标记沿用名称右侧内联时钟 -->
-  <div
+  <!-- 正常书签：真实 <a> 链接（中键/右键新标签页原生支持），常用标记为链接块左边框（金色） -->
+  <a
     v-else
     class="lk"
     :class="{ 'lk-fav': showFav }"
+    :href="safeHref"
     :title="showIdle ? idleTip : (showFav ? '常用书签' : undefined)"
-    @click="handleOpen"
+    @click.prevent="handleOpen"
+    @auxclick="handleAuxClick"
   >
     <!-- 有 favicon：用 FaviconImage（含加载失败回退字母头像） -->
     <FaviconImage
@@ -116,7 +137,7 @@ function handleOpen() {
       </div>
       <div v-if="prefsStore.showDomain" class="dm">{{ link.domain }}</div>
     </div>
-  </div>
+  </a>
 </template>
 
 <style scoped>
@@ -127,6 +148,9 @@ function handleOpen() {
   padding: clamp(9px, 2vw, 10px) clamp(9px, 2vw, 11px);
   border-radius: 15px;
   cursor: pointer;
+  /* 真实 <a> 链接：去掉默认下划线与链接色，视觉与原先 div 一致 */
+  text-decoration: none;
+  color: inherit;
   background: var(--link-bg);
   transition: all .2s;
   border: 1px solid transparent;
