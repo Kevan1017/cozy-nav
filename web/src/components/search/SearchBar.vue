@@ -33,6 +33,18 @@ function focus() {
 
 defineExpose({ focus });
 
+/** 仅 http/https 链接绑定 href：中键/右键「在新标签页打开」由浏览器原生支持，且不引入危险协议 */
+function safeHref(link) {
+  try {
+    const parsed = new URL(link.url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      ? link.url
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** 更新下拉框位置 */
 function updateDropPos() {
   if (!boxRef.value) return;
@@ -162,12 +174,13 @@ const showNoResult = computed(() => hasQuery.value && !showResults.value);
         :style="{ top: dropPos.top + 'px', left: dropPos.left + 'px', width: dropPos.width + 'px' }"
       >
         <template v-if="showResults">
-          <div
+          <a
             v-for="(link, i) in results"
             :key="link.id"
             class="result-item"
             :class="{ active: i === activeIndex }"
-            @click="emit('open', link)"
+            :href="safeHref(link)"
+            @click.prevent="emit('open', link)"
             @mouseenter="emit('navigate', i)"
           >
             <span class="r-name">
@@ -180,7 +193,7 @@ const showNoResult = computed(() => hasQuery.value && !showResults.value);
                 <mark v-if="p.hit" class="r-mark">{{ p.text }}</mark><template v-else>{{ p.text }}</template>
               </template>
             </span>
-          </div>
+          </a>
         </template>
         <div v-else class="no-more">没有更多结果</div>
       </div>
@@ -253,6 +266,9 @@ input::placeholder {
   gap: 10px;
   padding: 14px 18px;
   cursor: pointer;
+  /* 真实 <a> 链接：去掉默认下划线与链接色，视觉与原先 div 一致 */
+  text-decoration: none;
+  color: inherit;
   transition: background .15s;
 }
 

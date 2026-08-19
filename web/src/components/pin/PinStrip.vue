@@ -24,6 +24,25 @@ function handleOpen(link) {
   emit('open', link.url);
 }
 
+/** 仅 http/https 绑定 href：中键/右键「在新标签页打开」由浏览器原生支持，且不引入危险协议 */
+function safeHref(link) {
+  try {
+    const parsed = new URL(link.url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      ? link.url
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** 中键点击：浏览器原生在新标签页打开，这里只补记访问埋点，不拦截默认行为 */
+function handleAuxClick(e, link) {
+  if (e.button === 1 && link?.id) {
+    linkApi.visit(link.id).catch(() => {});
+  }
+}
+
 /** 格式化序号 */
 function rankText(index) {
   return String(index + 1).padStart(2, '0');
@@ -42,11 +61,13 @@ function rankText(index) {
 
     <!-- 有置顶链接 -->
     <div v-if="links.length > 0" class="pin-row">
-      <div
+      <a
         v-for="(link, index) in links"
         :key="link.id"
         class="pin-card"
-        @click="handleOpen(link)"
+        :href="safeHref(link)"
+        @click.prevent="handleOpen(link)"
+        @auxclick="(e) => handleAuxClick(e, link)"
       >
         <div class="top-row">
           <FaviconImage
@@ -62,7 +83,7 @@ function rankText(index) {
           <span class="rank">{{ rankText(index) }}</span>
         </div>
         <div class="nm">{{ link.name }}</div>
-      </div>
+      </a>
     </div>
 
     <!-- 无置顶链接：占位提示 -->
@@ -140,6 +161,10 @@ function rankText(index) {
   border-radius: 18px;
   padding: 13px 12px;
   cursor: pointer;
+  /* 真实 <a> 链接：去掉默认下划线与链接色，视觉与原先 div 一致 */
+  text-decoration: none;
+  color: inherit;
+  display: block;
   /* 强制独立合成层：稳定 backdrop 采样，缓解滚动时毛玻璃卡片白屏 */
   transform: translateZ(0);
   transition: transform .2s, box-shadow .2s;
