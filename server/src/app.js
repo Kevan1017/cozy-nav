@@ -207,8 +207,15 @@ startHealthPatrol();
 startDailyBackup();
 
 // 启动服务
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`[启动] 悦行 后端服务运行在 http://localhost:${PORT}`);
 });
+
+// 调大 keep-alive 超时：Node 默认 5s，比 nginx 的 proxy_read_timeout（默认 60s）短，
+// 长空闲后浏览器/nginx 会复用已被 Node 关闭的连接，导致"隔天首次进后台数据挂起、需刷新"。
+// 调大到 65s（> nginx 60s）后，连接由 nginx 侧超时，Node 不再提前断开。
+server.keepAliveTimeout = 65000;
+// headersTimeout 必须 > keepAliveTimeout，否则会被 Node 按请求超时提前销毁连接
+server.headersTimeout = 66000;
 
 export default app;
