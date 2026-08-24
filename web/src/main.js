@@ -26,13 +26,22 @@ const fontReady = applyFontFamily(prefsStore.fontFamily);
 const prefsReady = prefsStore.fetchPrefs().catch(() => {});
 dataStore.fetchCategories(false).catch(() => {});
 
+// 偏好请求超时兜底：长空闲后浏览器可能复用已失效的 keep-alive 连接，首个请求会长时间挂起。
+// 若此处无限等待，无本地偏好缓存的用户进入页面（含后台）会出现白屏"假死、无数据"，刷新才恢复。
+// 最多等 1.5s：正常请求毫秒级返回不受影响；异常时先挂载，偏好随后静默应用（App.vue watch 自动同步）。
+const PREFS_FETCH_TIMEOUT_MS = 1500;
+const prefsReadyCapped = Promise.race([
+  prefsReady,
+  new Promise((resolve) => setTimeout(resolve, PREFS_FETCH_TIMEOUT_MS)),
+]);
+
 // 等待字体 CSS 就绪后再挂载：确保首帧渲染即使用正确的字体，避免先系统字体后 web font 的跳动
 if (hasPrefsCache()) {
   // 回访用户：本地已有完整偏好，跳过偏好请求等待，仅等字体 CSS
   await (fontReady || Promise.resolve());
 } else {
-  // 新用户首访：等偏好与字体 CSS 都就绪，避免"默认配色 → 后端配置"闪烁
-  await Promise.all([prefsReady, fontReady || Promise.resolve()]);
+  // 新用户首访：等偏好与字体 CSS 都就绪，避免"默认配色 → 后端配置"闪烁（有超时兜底，不会白屏卡死）
+  await Promise.all([prefsReadyCapped, fontReady || Promise.resolve()]);
 }
 
 app.mount('#app');

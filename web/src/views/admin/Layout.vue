@@ -152,11 +152,13 @@ function confirmLogout() {
   <n-layout has-sider style="min-height: 100vh; background: var(--admin-surface);">
 
     <!-- ========== PC 端侧边栏 ========== -->
+    <!-- fixed 固定左侧栏：不随页面滚动，仅菜单区内部滚动，右侧数据区独立滚动 -->
     <n-layout-sider
       v-if="!isMobileView"
       :width="232"
       :bordered="false"
       :native-scrollbar="false"
+      style="position: fixed; top: 0; bottom: 0; left: 0; z-index: 10;"
     >
       <div class="sider-inner">
         <div class="brand">
@@ -197,7 +199,8 @@ function confirmLogout() {
     </n-layout-sider>
 
     <!-- ========== 主区域 ========== -->
-    <n-layout>
+    <!-- margin-left 为固定侧边栏让出宽度 -->
+    <n-layout style="margin-left: 232px; min-width: 0;">
 
       <!-- 移动端顶栏（PC 端隐藏，侧边栏已经有退出了） -->
       <n-layout-header
