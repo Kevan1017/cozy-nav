@@ -187,11 +187,24 @@ onMounted(() => {
   dmChecked.value = effectiveIsDark.value;
   // 跨标签页同步自定义配色 + 站点配置：后台修改后前台实时生效
   window.addEventListener('storage', onCrossTabPrefs);
+
+  // bfcache / 标签页恢复处理：从往返缓存（back/forward cache）恢复页面时，
+  // JS 状态是冻结的旧快照，数据可能已过期，表现为"假死、无数据"。
+  // 强制整页刷新（等价于用户手动刷新），确保数据与接口状态一致。
+  window.addEventListener('pageshow', onPageShow);
 });
 
 onUnmounted(() => {
   window.removeEventListener('storage', onCrossTabPrefs);
+  window.removeEventListener('pageshow', onPageShow);
 });
+
+/** 页面从 bfcache 恢复（浏览器前进/后退或返回旧标签页）时强制刷新，避免旧快照"假死" */
+function onPageShow(e) {
+  if (e.persisted) {
+    window.location.reload();
+  }
+}
 </script>
 
 <template>

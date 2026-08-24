@@ -46,6 +46,20 @@ request.interceptors.response.use(
   async (error) => {
     const config = error.config || {};
 
+    // ===== 数据请求自动重试（仅 GET，且仅一次）=====
+    // 场景：长时间空闲后浏览器复用失效的 keep-alive 连接，首个请求挂起/断连，
+    // 表现为后台界面正常但数据缺失，需手动刷新才恢复。
+    // 对超时/网络错误自动重试一次：重试走新连接，通常立即成功，避免用户手动刷新。
+    const method = (config.method || 'get').toLowerCase();
+    if (
+      method === 'get' &&
+      (error.code === 'ECONNABORTED' || !error.response) &&
+      !config._retried
+    ) {
+      config._retried = true; // 防止死循环，仅重试一次
+      return request(config);
+    }
+
     // ===== 保险库 Token 过期处理 =====
     // 条件：401 + 消息含"保险库" + 非刷新请求自身 + 未重试过
     if (
