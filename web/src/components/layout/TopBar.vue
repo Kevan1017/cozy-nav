@@ -3,17 +3,9 @@
  * 顶部栏：品牌标识 + 副标题 + 日期胶囊 + 工具栏
  * 设置入口：已登录直接进后台，未登录弹出登录模态框
  */
-import { ref, reactive, watch, inject, computed } from 'vue';
+import { ref, watch, inject, computed } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
-import {
-  NModal,
-  NForm,
-  NFormItem,
-  NInput,
-  NButton,
-  NDropdown,
-  useMessage,
-} from 'naive-ui';
+import { NDropdown } from 'naive-ui';
 import { useClock } from '../../composables/useClock.js';
 import { useAuthStore } from '../../stores/auth.js';
 import { usePrefsStore } from '../../stores/prefs.js';
@@ -22,7 +14,6 @@ const { greeting, dateText, timeText, lunarText } = useClock();
 const router = useRouter();
 const authStore = useAuthStore();
 const prefsStore = usePrefsStore();
-const message = useMessage();
 
 /** 主题模式（从 App.vue 注入） */
 const themeMode = inject('themeMode', computed(() => 'auto'));
@@ -114,71 +105,12 @@ function handleSortSelect(key) {
   }
 }
 
-/** 登录模态框 */
-const loginModal = ref(false);
-const formRef = ref(null);
-const formModel = reactive({
-  username: '',
-  password: '',
-});
-const loading = ref(false);
-
-const rules = {
-  username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
-  ],
-  password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 3, message: '密码至少 3 位', trigger: 'blur' },
-  ],
-};
-
-// 监听 authStore 的登录弹窗请求
-watch(() => authStore.showLoginModal, (val) => {
-  loginModal.value = val;
-  if (val) {
-    formModel.username = '';
-    formModel.password = '';
-  }
-});
-
-/** 点击设置齿轮 */
+/** 点击设置齿轮：已登录直接进后台，未登录弹全局登录框 */
 function handleSettings() {
   if (authStore.isLoggedIn) {
     router.push('/admin');
   } else {
-    formModel.username = '';
-    formModel.password = '';
-    loginModal.value = true;
-  }
-}
-
-/** 关闭登录弹窗 */
-function closeLogin() {
-  loginModal.value = false;
-  authStore.closeLoginModal();
-  formModel.username = '';
-  formModel.password = '';
-  formRef.value?.restoreValidation();
-}
-
-/** 执行登录 */
-async function doLogin() {
-  try {
-    await formRef.value?.validate();
-  } catch {
-    return;
-  }
-  loading.value = true;
-  try {
-    await authStore.login(formModel.username, formModel.password);
-    message.success('登录成功');
-    closeLogin();
-    router.push('/admin');
-  } catch {
-    message.error('用户名或密码错误');
-  } finally {
-    loading.value = false;
+    authStore.openLoginModal();
   }
 }
 </script>
@@ -282,71 +214,6 @@ async function doLogin() {
       </button>
     </div>
   </div>
-
-  <!-- 登录模态框 -->
-  <n-modal
-    v-model:show="loginModal"
-    :mask-closable="true"
-    preset="dialog"
-    :show-icon="false"
-    class="top-login-modal"
-  >
-    <div class="login-modal-body">
-      <div class="login-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <rect x="3" y="11" width="18" height="11" rx="2" />
-          <path d="M7 11V7a5 5 0 0110 0v4" stroke-linecap="round" />
-        </svg>
-      </div>
-      <h2 class="login-title">管理后台</h2>
-      <p class="login-hint">请登录以管理你的书签</p>
-
-      <n-form
-        ref="formRef"
-        :model="formModel"
-        :rules="rules"
-        label-placement="top"
-        size="large"
-        class="login-form"
-        @submit.prevent="doLogin"
-      >
-        <n-form-item path="username">
-          <n-input
-            v-model:value="formModel.username"
-            placeholder="用户名"
-            clearable
-            autocomplete="username"
-            size="large"
-          >
-            <template #prefix>👤</template>
-          </n-input>
-        </n-form-item>
-        <n-form-item path="password">
-          <n-input
-            v-model:value="formModel.password"
-            type="password"
-            show-password-on="click"
-            placeholder="密码"
-            autocomplete="current-password"
-            size="large"
-            @keyup.enter="doLogin"
-          >
-            <template #prefix>🔒</template>
-          </n-input>
-        </n-form-item>
-        <n-button
-          type="primary"
-          block
-          size="large"
-          :loading="loading"
-          @click="doLogin"
-          style="margin-top: 4px;"
-        >
-          {{ loading ? '登录中...' : '登 录' }}
-        </n-button>
-      </n-form>
-    </div>
-  </n-modal>
 </template>
 
 <style scoped>
@@ -534,58 +401,6 @@ async function doLogin() {
 @keyframes theme-cycle {
   0% { transform: rotate(-90deg) scale(0.5); opacity: 0; }
   100% { transform: rotate(0deg) scale(1); opacity: 1; }
-}
-
-/* ========== 登录弹窗样式 ========== */
-.login-modal-body {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: clamp(8px, 2vw, 16px) 0 0;
-}
-
-.login-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, var(--pop), var(--pop2));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--on-pop);
-  box-shadow: 0 10px 24px -8px var(--pop);
-  margin-bottom: 12px;
-}
-
-.login-icon svg {
-  width: 26px;
-  height: 26px;
-}
-
-.login-title {
-  /* 使用 var(--app-font) 跟随全局字体切换 */
-  font-family: 'Fredoka', var(--app-font, sans-serif);
-  font-size: clamp(18px, 3.5vw, 22px);
-  font-weight: 700;
-  color: var(--ink);
-  margin-bottom: 4px;
-}
-
-.login-hint {
-  font-size: 13px;
-  color: var(--soft);
-  margin-bottom: 16px;
-  text-align: center;
-}
-
-.login-form {
-  width: 100%;
-}
-
-:deep(.top-login-modal .n-modal) {
-  width: clamp(300px, 90vw, 380px);
-  border-radius: 20px !important;
-  backdrop-filter: blur(20px);
 }
 
 /* ========== 响应式 ========== */

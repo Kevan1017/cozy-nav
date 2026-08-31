@@ -86,15 +86,40 @@ const router = createRouter({
   routes,
 });
 
-// 鉴权守卫：未登录访问后台时返回首页 + 弹出登录框
+/**
+ * 解析 JWT payload 并判断是否过期（仅用于前端守卫，不做签名校验）
+ * 过期 / 无法解析时视为已失效，返回 true
+ */
+function isTokenExpired(token) {
+  try {
+    const [, payloadB64] = token.split('.');
+    const normalized = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(decodeURIComponent(escape(atob(normalized))));
+    // 无 exp 字段视为永久有效（兼容老 token）；exp 为秒级时间戳
+    if (!payload.exp) return false;
+    return Date.now() >= payload.exp * 1000;
+  } catch {
+    // 无法解析的 token 直接视为过期
+    return true;
+  }
+}
+
+// 鉴权守卫：未登录或 token 过期访问后台时返回首页 + 弹出登录框
 router.beforeEach((to) => {
   const token = localStorage.getItem('token');
   const requiresAuth = to.matched.some((r) => r.meta.requiresAuth);
 
-  if (requiresAuth && !token) {
-    const authStore = useAuthStore();
-    authStore.openLoginModal();
-    return { name: 'Home' };
+  if (requiresAuth) {
+    // token 缺失或已过期 → 清掉本地登录态并弹登录框
+    if (!token || isTokenExpired(token)) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('username');
+      const authStore = useAuthStore();
+      authStore.token = '';
+      authStore.username = '';
+      authStore.openLoginModal();
+      return { name: 'Home' };
+    }
   }
 });
 

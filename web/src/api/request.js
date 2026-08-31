@@ -112,12 +112,13 @@ request.interceptors.response.use(
       status = null;
       code = 'NETWORK_ERROR';
     } else if (status === 401) {
-      // 登录 token 过期（非保险库）
+      // 登录 token 过期（非保险库）：清本地与 store 登录态，触发全局登录弹窗
       localStorage.removeItem('token');
       localStorage.removeItem('username');
-      // 触发登录弹窗（动态导入避免循环依赖）
       import('../stores/auth.js').then(({ useAuthStore }) => {
         const authStore = useAuthStore();
+        authStore.token = '';
+        authStore.username = '';
         authStore.openLoginModal();
       });
       message = '登录已过期，请重新登录';
