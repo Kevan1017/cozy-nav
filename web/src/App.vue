@@ -21,6 +21,7 @@ import { applyPresetCssVars, getPresetNaiveOverrides, mergeAdminCustomOverrides 
 import { DEFAULT_PRESET_KEYS, getPresetByKey } from './theme/themePresets.js';
 import { applyFontFamily } from './composables/useFont.js';
 import VaultUnlockModal from './components/bookmark/VaultUnlockModal.vue';
+import LoginModal from './components/ui/LoginModal.vue';
 
 const prefsStore = usePrefsStore();
 const { hour } = useClock();
@@ -226,6 +227,8 @@ function onPageShow(e) {
         <RouterView />
         <!-- 全局保险库解锁弹窗：由 vault store 的 showPasswordModal 控制 -->
         <VaultUnlockModal />
+        <!-- 全局登录弹窗：由 auth store 的 showLoginModal 控制，前台/后台均可用 -->
+        <LoginModal />
       </n-dialog-provider>
     </n-message-provider>
   </n-config-provider>
